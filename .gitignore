@@ -1,0 +1,9 @@
+*#
+*.exe
+*.html
+*.log
+*.mat
+*.mex*
+*.png
+*.tmp
+*.zip
