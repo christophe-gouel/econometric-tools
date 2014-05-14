@@ -22,8 +22,8 @@ function [params,ML,vcov,g,H,exitflag,output] = MaxLik(loglikfun,params,obs,opti
 %   ParamsTransformInv    :
 %   ParamsTransformInvDer :
 %   solver                : 'fminunc' (default), 'fminsearch', or 'patternsearch'
-%   solveroptions         : structure of options to be passed to the solver
-%                           maximizing the likelihood.
+%   solveroptions         : options to be passed to the solver maximizing the 
+%                           likelihood.
 %
 % PARAMS = MAXLIK(LOGLIKFUN,PARAMS,OBS,OPTIONS,VARARGIN) provides additional
 % arguments for LOGLIKFUN, which, in this case, takes the following form:
@@ -69,13 +69,12 @@ if nargin < 4 || isempty(options)
 else
   warning('off','catstruct:DuplicatesFound')
   if isfield(options,'numhessianoptions')
-    options.numhessianoptions = catstruct(defaultopt.numhessianoptions,options.numhessianoptions);
+    options.numhessianoptions = catstruct(defaultopt.numhessianoptions,...
+                                          options.numhessianoptions);
   end
   if isfield(options,'numjacoptions')
-    options.numjacoptions = catstruct(defaultopt.numjacoptions,options.numjacoptions);
-  end
-  if isfield(options,'solveroptions')
-    options.solveroptions = catstruct(defaultopt.solveroptions,options.solveroptions);
+    options.numjacoptions = catstruct(defaultopt.numjacoptions,...
+                                      options.numjacoptions);
   end
   options = catstruct(defaultopt,options);
 end
@@ -95,7 +94,8 @@ if norm(ParamsTransformInv(ParamsTransform(params))-params)>=sqrt(eps)
   error('Functions to transform parameters are not inverse of each other')
 end
 
-if norm(diag(numjac(@(P) ParamsTransformInv(P),ParamsTransform(params)))-ParamsTransformInvDer(ParamsTransform(params)))>=sqrt(eps)
+if norm(diag(numjac(@(P) ParamsTransformInv(P),ParamsTransform(params)))...
+        -ParamsTransformInvDer(ParamsTransform(params)))>=sqrt(eps)
   error(['The function to differentiate transformed parameters does not correspond ' ...
          'to its finite difference gradient.'])
 end  
