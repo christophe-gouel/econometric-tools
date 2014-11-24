@@ -124,19 +124,17 @@ ind             = 1:length(params);
 SelectParamsMat(sub2ind(size(SelectParamsMat),ind(ActiveParams),1:sum(ActiveParams))) = 1;
 SelectParams    = @(P) ParamsTransform(params).*(~ActiveParams)+SelectParamsMat*P;
 
-if all(isinf(options.bounds.lb))
-  lb = options.bounds.lb;
-else
-  lb = min(ParamsTransform(options.bounds.lb), ...
-           ParamsTransform(options.bounds.ub));
+lb = -inf(length(params),1);
+ub = +inf(length(params),1);
+lbtrans = min(ParamsTransform(options.bounds.lb),ParamsTransform(options.bounds.ub));
+ubtrans = max(ParamsTransform(options.bounds.lb),ParamsTransform(options.bounds.ub));
+for i=1:length(params)
+  if any(isfinite([options.bounds.lb(i) options.bounds.ub(i)]))
+    lb(i) = lbtrans(i);
+    ub(i) = ubtrans(i);
+  end
 end
-if all(isinf(options.bounds.ub))
-  ub = options.bounds.ub;
-else
-  ub = max(ParamsTransform(options.bounds.lb), ...
-           ParamsTransform(options.bounds.ub));
-end
-
+  
 %% Maximization of the log-likelihood
 Objective = @(P) -sum(loglikfun(ParamsTransformInv(SelectParams(P)),obs,varargin{:}))/nobs;
 problem = struct('objective', Objective,...
