@@ -21,8 +21,8 @@ function [params,ML,vcov,g,H,exitflag,output] = MaxLik(loglikfun,params,obs,opti
 %   ParamsTransform       :
 %   ParamsTransformInv    :
 %   ParamsTransformInvDer :
-%   solver                : 'fmincon', 'fminunc' (default), 'fminsearch', or
-%                           'patternsearch'
+%   solver                : 'fmincon', 'fminunc' (default), 'fminsearch',
+%                           'patternsearch', or 'pswarm'
 %   solveroptions         : options to be passed to the solver maximizing the
 %                           likelihood.
 %
@@ -116,11 +116,12 @@ end
 if isa(loglikfun,'char'), loglikfun = str2func(loglikfun); end
 
 if isempty(ActiveParams)
-  ActiveParams = true(nparams);
+  ActiveParams = true(nparams,1);
 else
   validateattributes(ActiveParams,{'logical','numeric'},{'vector','numel',nparams})
   ActiveParams = ActiveParams(:)~=zeros(nparams,1);
 end
+ActiveParams0 = ActiveParams;
 
 %% Functions and matrices to extract active parameters for the estimation
 SelectParamsMat = zeros(nparams,sum(ActiveParams));
@@ -142,14 +143,14 @@ end
 
 %% Maximization of the log-likelihood
 Objective = @(P) -sum(loglikfun(ParamsTransformInv(SelectParams(P)),obs,varargin{:}),1)/nobs;
-params    = SelectParamsMat'*ParamsTransform(params);
+PARAMS    = SelectParamsMat'*ParamsTransform(params);
 
 try
   switch lower(solver)
     case {'fmincon','fminunc','fminsearch','patternsearch'}
       %% MATLAB solvers
       problem = struct('objective', Objective,...
-                       'x0'       , params,...
+                       'x0'       , PARAMS,...
                        'solver'   , solver,...
                        'lb'       , lb(ActiveParams),...
                        'ub'       , ub(ActiveParams),...
@@ -162,11 +163,16 @@ try
                        'ObjFunction', Objective,...
                        'LB'         , lb(ActiveParams),...
                        'UB'         , ub(ActiveParams));
-      for it=1:size(params,2), InitialPopulation(it).x = params(:,it); end
+      for it=1:size(PARAMS,2), InitialPopulation(it).x = PARAMS(:,it); end
       [PARAMS,ML,output] = PSwarm(problem,InitialPopulation,solveroptions);
       exitflag = 1;
+
+    otherwise
+      error(['Invalid value for OPTIONS field solver: must be ' ...
+             '''fmincon'', ''fminunc'', ''fminsearch'', ''patternsearch'', or ''pswarm''']);
   end
 catch err
+  %% Values in case of error
   params   = NaN(length(ActiveParams),1);
   ML       = NaN;
   vcov     = NaN(length(ActiveParams));
@@ -175,17 +181,31 @@ catch err
   exitflag = 0;
   output   = err;
   return
+
 end
 params                      = ParamsTransformInv(SelectParams(PARAMS));
 ML                          = -ML;
 
 %% Covariance and hessian of parameters
+
+% Covariance and hessian are only calculated for parameters that are not at their bounds
+AtBounds               = params==options.bounds.lb | params==options.bounds.ub;
+ActiveParams(AtBounds) = 0;
+SelectParamsMat        = zeros(nparams,sum(ActiveParams));
+SelectParamsMat(sub2ind(size(SelectParamsMat),ind(ActiveParams),1:sum(ActiveParams))) = 1;
+FixedParams            = ParamsTransform(params).*(~ActiveParams);
+SelectParams           = @(P) FixedParams(:,ones(size(P,2),1))+SelectParamsMat*P;
+PARAMS                 = SelectParamsMat'*ParamsTransform(params);
+Objective = @(P) -sum(loglikfun(ParamsTransformInv(SelectParams(P)),obs,varargin{:}),1)/nobs;
+
+% Gradient
 if nargout>=4 || (nargout>=3 && any(cov==[2 3]))
   G   = numjac(@(P) loglikfun(ParamsTransformInv(SelectParams(P)),obs,varargin{:}),...
                PARAMS,options.numjacoptions);
   g   = -sum(G,1)'/nobs;
 end
 
+% Hessian
 if nargout>=5 || (nargout>=3 && any(cov==[1 3]))
   H = numhessian(Objective,PARAMS,options.numhessianoptions);
   if all(isfinite(H(:)))
@@ -197,17 +217,20 @@ if nargout>=5 || (nargout>=3 && any(cov==[1 3]))
   end
 end
 
+% Covariance
+vcov = NaN(sum(ActiveParams0),sum(ActiveParams0));
 if nargout>=3
   D = diag(ParamsTransformInvDer(SelectParams(PARAMS)));
   D = D(ActiveParams,ActiveParams);
   switch cov
     case 1
-      vcov = D'*(H\D)/nobs;
+      vcov(ActiveParams,ActiveParams) = D'*(H\D)/nobs;
     case 2
-      vcov = D'*((G'*G)\D);
+      vcov(ActiveParams,ActiveParams) = D'*((G'*G)\D);
     case 3
-      vcov = D'*(H\(G'*G)/H)*D/nobs^2;
+      vcov(ActiveParams,ActiveParams) = D'*(H\(G'*G)/H)*D/nobs^2;
     otherwise
       vcov = [];
   end
 end
+

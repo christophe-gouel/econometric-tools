@@ -1,6 +1,6 @@
 function tests = MaxLikTest
 % MAXLIKTEST Runs unit-tests for MaxLik function
-  
+
 % Copyright (C) 2014 Christophe Gouel
 % Licensed under the Expat license
 
@@ -11,7 +11,7 @@ end
 function testCompareWithOLS(testCase)
 
 warning('off','all');
-  
+
 %% Generate data
 par = [1 0.1 0.5 0.2]';
 N = 500;
@@ -40,6 +40,20 @@ verifyLessThanOrEqual(testCase,abs((MLfit.Coefficients.SE-sqrt(diag(vcov(1:end-1
 
 options.cov = 3;
 [~,~,vcov] = MaxLik(LogLik,paropt,data,options);
+verifyLessThanOrEqual(testCase,abs((MLfit.Coefficients.SE-sqrt(diag(vcov(1:end-1,1:end-1))))./MLfit.Coefficients.SE),0.15)
+
+% Vectorization
+LogLik = @(params,obs) -0.5*bsxfun(@plus,log(params(end,:).^2)+log(2*pi),...
+                                   bsxfun(@rdivide,...
+                                          bsxfun(@minus,...
+                                                 obs(:,end),...
+                                                 obs(:,1:end-1)*params(1:end-1,:)).^2,params(end,:).^2));
+
+options.cov                      = 1;
+options.numjacoptions.Vectorized = 'on';
+[paropt,ML,vcov] = MaxLik(LogLik,par0,data,options);
+verifyLessThanOrEqual(testCase,abs((MLfit.LogLikelihood-ML*N)/MLfit.LogLikelihood),5E-3)
+verifyLessThanOrEqual(testCase,abs(MLfit.Coefficients.Estimate-paropt(1:end-1)),1E-5)
 verifyLessThanOrEqual(testCase,abs((MLfit.Coefficients.SE-sqrt(diag(vcov(1:end-1,1:end-1))))./MLfit.Coefficients.SE),0.15)
 
 end

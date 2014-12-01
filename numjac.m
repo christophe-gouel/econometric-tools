@@ -97,8 +97,9 @@ if ~options.SerialProblem
       if central, xx = x(:,ones(2*d,1));
       else        xx = x(:,ones(d,1));
       end
-      xx(sub2ind([d d],1:d,1:d))                 = x1;
-      if central, xx(d^2+sub2ind([d d],1:d,1:d)) = x0; end
+      ind = sub2ind([d d],1:d,1:d);
+      xx(ind)                 = x1;
+      if central, xx(d^2+ind) = x0; end
       ff  = FUN(xx,varargin{:});
       if central
         J = ff(:,1:d)-ff(:,(d+1):(2*d));
