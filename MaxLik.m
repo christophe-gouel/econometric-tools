@@ -1,29 +1,29 @@
 function [params,ML,vcov,g,H,exitflag,output] = MaxLik(loglikfun,params,obs,options,varargin)
 % MAXLIK Maximizes a log-likelihood function
 %
-% PARAMS = MAXLIK(LOGLIKFUN,PARAMS,OBS) 
+% PARAMS = MAXLIK(LOGLIKFUN,PARAMS,OBS)
 %
 % PARAMS = MAXLIK(LOGLIKFUN,PARAMS,OBS,OPTIONS) maximizes the log-likelihood
 % function with the parameters defined by the structure OPTIONS. The fields of
 % the structure are
-%   ActiveParams          : 
-%   cov                   : method to calculate the covariance matrix of the 
-%                           parameters, 1 for inverse hessian, 2 for the 
+%   ActiveParams          :
+%   cov                   : method to calculate the covariance matrix of the
+%                           parameters, 1 for inverse hessian, 2 for the
 %                           cross-product of the first-order derivatives, and 3
 %                           (default) for a covariance matrix based on the
 %                           hessian and the first-order derivatives.
-%   numhessianoptions     : structure of options to be passed to the function 
+%   numhessianoptions     : structure of options to be passed to the function
 %                           numhessian that can be used to calculate the hessian
 %                           for the covariance matrix of the parameters.
-%   numjacoptions         : structure of options to be passed to the function 
+%   numjacoptions         : structure of options to be passed to the function
 %                           numjac that can be used to calculate the jacobian
 %                           for the covariance matrix of the parameters.
 %   ParamsTransform       :
 %   ParamsTransformInv    :
 %   ParamsTransformInvDer :
-%   solver                : 'fmincon', 'fminunc' (default), 'fminsearch', or 
+%   solver                : 'fmincon', 'fminunc' (default), 'fminsearch', or
 %                           'patternsearch'
-%   solveroptions         : options to be passed to the solver maximizing the 
+%   solveroptions         : options to be passed to the solver maximizing the
 %                           likelihood.
 %
 % PARAMS = MAXLIK(LOGLIKFUN,PARAMS,OBS,OPTIONS,VARARGIN) provides additional
@@ -56,9 +56,12 @@ function [params,ML,vcov,g,H,exitflag,output] = MaxLik(loglikfun,params,obs,opti
 % Licensed under the Expat license
 
 %% Initialization
+
+nparams = size(params,1);
+
 defaultopt = struct('ActiveParams'         , [],...
-                    'bounds'               , struct('lb',-inf(size(params)),...
-                                                    'ub', inf(size(params))),...
+                    'bounds'               , struct('lb',-inf(nparams,1),...
+                                                    'ub', inf(nparams,1)),...
                     'cov'                  , 3,...
                     'numhessianoptions'    , struct(),...
                     'numjacoptions'        , struct(),...
@@ -91,60 +94,78 @@ ParamsTransform       = options.ParamsTransform;
 ParamsTransformInv    = options.ParamsTransformInv;
 ParamsTransformInvDer = options.ParamsTransformInvDer;
 solver                = options.solver;
+solveroptions         = options.solveroptions;
 
 validateattributes(loglikfun,{'char','function_handle'},{},1)
-validateattributes(params,{'numeric'},{'column','nonempty'},2)
+validateattributes(params,{'numeric'},{'2d'},2)
 
 nobs = size(obs,1);
 
 if options.TestParamsTransform && ...
-      norm(ParamsTransformInv(ParamsTransform(params))-params)>=sqrt(eps)
+      norm(ParamsTransformInv(ParamsTransform(params(:,1)))-params(:,1))>=sqrt(eps)
   error('Functions to transform parameters are not inverse of each other')
 end
 
 if options.TestParamsTransform && ...
-      norm(diag(numjac(@(P) ParamsTransformInv(P),ParamsTransform(params)))...
-           -ParamsTransformInvDer(ParamsTransform(params)))>=1E-6
+      norm(diag(numjac(@(P) ParamsTransformInv(P),ParamsTransform(params(:,1))))...
+           -ParamsTransformInvDer(ParamsTransform(params(:,1))))>=1E-6
   error(['The function to differentiate transformed parameters does not correspond ' ...
          'to its finite difference gradient.'])
-end  
-  
+end
+
 if isa(loglikfun,'char'), loglikfun = str2func(loglikfun); end
 
 if isempty(ActiveParams)
-  ActiveParams = true(size(params));
+  ActiveParams = true(nparams);
 else
-  validateattributes(ActiveParams,{'logical','numeric'},{'vector','numel',numel(params)})
-  ActiveParams = ActiveParams(:)~=zeros(size(params));
+  validateattributes(ActiveParams,{'logical','numeric'},{'vector','numel',nparams})
+  ActiveParams = ActiveParams(:)~=zeros(nparams,1);
 end
 
 %% Functions and matrices to extract active parameters for the estimation
-SelectParamsMat = zeros(length(params),sum(ActiveParams));
-ind             = 1:length(params);
+SelectParamsMat = zeros(nparams,sum(ActiveParams));
+ind             = 1:nparams;
 SelectParamsMat(sub2ind(size(SelectParamsMat),ind(ActiveParams),1:sum(ActiveParams))) = 1;
-SelectParams    = @(P) ParamsTransform(params).*(~ActiveParams)+SelectParamsMat*P;
+FixedParams     = ParamsTransform(params(:,1)).*(~ActiveParams);
+SelectParams    = @(P) FixedParams(:,ones(size(P,2),1))+SelectParamsMat*P;
 
-lb = -inf(length(params),1);
-ub = +inf(length(params),1);
+lb = -inf(nparams,1);
+ub = +inf(nparams,1);
 lbtrans = min(ParamsTransform(options.bounds.lb),ParamsTransform(options.bounds.ub));
 ubtrans = max(ParamsTransform(options.bounds.lb),ParamsTransform(options.bounds.ub));
-for i=1:length(params)
+for i=1:nparams
   if any(isfinite([options.bounds.lb(i) options.bounds.ub(i)]))
     lb(i) = lbtrans(i);
     ub(i) = ubtrans(i);
   end
 end
-  
+
 %% Maximization of the log-likelihood
-Objective = @(P) -sum(loglikfun(ParamsTransformInv(SelectParams(P)),obs,varargin{:}))/nobs;
-problem = struct('objective', Objective,...
-                 'x0'       , SelectParamsMat'*ParamsTransform(params),...
-                 'solver'   , solver,...
-                 'lb'       , lb(ActiveParams),...
-                 'ub'       , ub(ActiveParams),...
-                 'options'  , options.solveroptions);
+Objective = @(P) -sum(loglikfun(ParamsTransformInv(SelectParams(P)),obs,varargin{:}),1)/nobs;
+params    = SelectParamsMat'*ParamsTransform(params);
+
 try
-  [PARAMS,ML,exitflag,output] = feval(solver,problem);
+  switch lower(solver)
+    case {'fmincon','fminunc','fminsearch','patternsearch'}
+      %% MATLAB solvers
+      problem = struct('objective', Objective,...
+                       'x0'       , params,...
+                       'solver'   , solver,...
+                       'lb'       , lb(ActiveParams),...
+                       'ub'       , ub(ActiveParams),...
+                       'options'  , solveroptions);
+      [PARAMS,ML,exitflag,output] = feval(solver,problem);
+
+    case 'pswarm'
+      %% PSwarm
+      problem = struct('Variables'  , sum(ActiveParams),...
+                       'ObjFunction', Objective,...
+                       'LB'         , lb(ActiveParams),...
+                       'UB'         , ub(ActiveParams));
+      for it=1:size(params,2), InitialPopulation(it).x = params(:,it); end
+      [PARAMS,ML,output] = PSwarm(problem,InitialPopulation,solveroptions);
+      exitflag = 1;
+  end
 catch err
   params   = NaN(length(ActiveParams),1);
   ML       = NaN;
