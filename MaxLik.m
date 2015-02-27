@@ -266,10 +266,10 @@ if nargout>=5 || (nargout>=3 && any(cov==[1 3]))
   H = numhessian(Objective,PARAMS,options.numhessianoptions);
   if all(isfinite(H(:)))
     if ~all(eig(H)>=0)
-      warning('Hessian is not positive definite')
+      warning('MaxLik:HessNotPosDef','Hessian is not positive definite')
     end
   else
-    warning('Hessian has infinite elements')
+    warning('MaxLik:HessInfElements','Hessian has infinite elements')
   end
 end
 
