@@ -56,7 +56,7 @@ function [params,ML,vcov,g,H,exitflag,output] = MaxLik(loglikfun,params,obs,opti
 %
 % See also FMINSEARCH, FMINUNC, NUMHESSIAN, NUMJAC.
 
-% Copyright (C) 2014 Christophe Gouel
+% Copyright (C) 2014-2015 Christophe Gouel
 % Licensed under the Expat license
 
 %% Initialization
@@ -256,14 +256,33 @@ Objective = @(P) -sum(loglikfun(ParamsTransformInv(SelectParams(P)),obs,varargin
 
 % Gradient
 if nargout>=4 || (nargout>=3 && any(cov==[2 3]))
-  G   = numjac(@(P) loglikfun(ParamsTransformInv(SelectParams(P)),obs,varargin{:}),...
-               PARAMS,options.numjacoptions);
-  g   = -sum(G,1)'/nobs;
+  try
+    G   = numjac(@(P) loglikfun(ParamsTransformInv(SelectParams(P)),obs,varargin{:}),...
+                 PARAMS,options.numjacoptions);
+    g   = -sum(G,1)'/nobs;
+  catch err
+    %% Values in case of error
+    vcov     = NaN(length(ActiveParams));
+    g        = NaN(length(ActiveParams),1);
+    H        = NaN(length(ActiveParams));
+    output   = err;
+    return
+    
+  end
 end
 
 % Hessian
 if nargout>=5 || (nargout>=3 && any(cov==[1 3]))
-  H = numhessian(Objective,PARAMS,options.numhessianoptions);
+  try
+    H = numhessian(Objective,PARAMS,options.numhessianoptions);
+  catch err
+    %% Values in case of error
+    vcov     = NaN(length(ActiveParams));
+    H        = NaN(length(ActiveParams));
+    output   = err;
+    return
+    
+  end
   if all(isfinite(H(:)))
     if ~all(eig(H)>=0)
       warning('MaxLik:HessNotPosDef','Hessian is not positive definite')
