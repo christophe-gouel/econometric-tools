@@ -1,7 +1,9 @@
 function [params,ML,vcov,g,H,exitflag,output] = MaxLik(loglikfun,params,obs,options,varargin)
 % MAXLIK Maximizes a log-likelihood function
 %
-% PARAMS = MAXLIK(LOGLIKFUN,PARAMS,OBS)
+% PARAMS = MAXLIK(LOGLIKFUN,PARAMS,OBS) maximizes the log-likelihood function
+% LOGLIKFUN with respect to parameters with initial values PARAMS and using the
+% observables OBS. PARAMS is either a matrix or a table with parameters in rows.
 %
 % PARAMS = MAXLIK(LOGLIKFUN,PARAMS,OBS,OPTIONS) maximizes the log-likelihood
 % function with the parameters defined by the structure OPTIONS. The fields of
@@ -116,7 +118,15 @@ end
 validateattributes(solveroptions,{'cell'},{'numel',numel(solver)})
 
 validateattributes(loglikfun,{'char','function_handle'},{},1)
-validateattributes(params,{'numeric'},{'2d'},2)
+validateattributes(params,{'numeric','table'},{'2d'},2)
+
+if isa(params,'table')
+  CoefficientNames = params.Properties.RowNames;
+  params = params{:,:};
+  ToTable = @(Estimate) table(Estimate,'RowNames',CoefficientNames);
+else
+  ToTable = @(P) P;
+end
 
 nobs = size(obs,1);
 
@@ -167,7 +177,8 @@ try
     switch lower(solver{i})
       case {'fmincon','fminunc','fminsearch','patternsearch'}
         %% MATLAB solvers
-        Objective = @(P) -sum(loglikfun(ParamsTransformInv(SelectParams(P)),obs,varargin{:}),1)/nobs;
+        Objective = @(P) -sum(loglikfun(ToTable(ParamsTransformInv(SelectParams(P))),...
+                                        obs,varargin{:}),1)/nobs;
         problem = struct('objective', Objective,...
                          'x0'       , PARAMS,...
                          'solver'   , solver{i},...
@@ -177,7 +188,8 @@ try
         [PARAMS,ML,exitflag,output] = feval(solver{i},problem);
 
       case 'particleswarm'
-        Objective = @(P) -sum(loglikfun(ParamsTransformInv(SelectParams(P')),obs,varargin{:}),1)'/nobs;
+        Objective = @(P) -sum(loglikfun(ToTable(ParamsTransformInv(SelectParams(P'))),...
+                                        obs,varargin{:}),1)'/nobs;
         solveroptions{i}.InitialSwarm = PARAMS';
         problem = struct('solver'   , solver{i},...
                          'objective', Objective,...
@@ -189,7 +201,8 @@ try
         PARAMS = PARAMS';
 
       case 'ga'
-        Objective = @(P) -sum(loglikfun(ParamsTransformInv(SelectParams(P')),obs,varargin{:}),1)'/nobs;
+        Objective = @(P) -sum(loglikfun(ToTable(ParamsTransformInv(SelectParams(P'))),...
+                                        obs,varargin{:}),1)'/nobs;
         solveroptions{i}.InitialPopulation = PARAMS';
         problem = struct('solver'    , solver{i},...
                          'fitnessfcn', Objective,...
@@ -208,7 +221,8 @@ try
 
       case 'pswarm'
         %% PSwarm
-        Objective = @(P) -sum(loglikfun(ParamsTransformInv(SelectParams(P)),obs,varargin{:}),1)/nobs;
+        Objective = @(P) -sum(loglikfun(ToTable(ParamsTransformInv(SelectParams(P))),...
+                                        obs,varargin{:}),1)/nobs;
         if strcmpi(options.Vectorized,'on'), solveroptions{i}.Vectorized = 1; end
         problem = struct('Variables'  , sum(ActiveParams),...
                          'ObjFunction', Objective,...
@@ -252,12 +266,14 @@ SelectParamsMat(sub2ind(size(SelectParamsMat),ind(ActiveParams),1:sum(ActivePara
 FixedParams            = ParamsTransform(params).*(~ActiveParams);
 SelectParams           = @(P) FixedParams(:,ones(size(P,2),1))+SelectParamsMat*P;
 PARAMS                 = SelectParamsMat'*ParamsTransform(params);
-Objective = @(P) -sum(loglikfun(ParamsTransformInv(SelectParams(P)),obs,varargin{:}),1)/nobs;
+Objective = @(P) -sum(loglikfun(ToTable(ParamsTransformInv(SelectParams(P))),...
+                                obs,varargin{:}),1)/nobs;
 
 % Gradient
 if nargout>=4 || (nargout>=3 && any(cov==[2 3]))
   try
-    G   = numjac(@(P) loglikfun(ParamsTransformInv(SelectParams(P)),obs,varargin{:}),...
+    G   = numjac(@(P) loglikfun(ToTable(ParamsTransformInv(SelectParams(P))),...
+                                obs,varargin{:}),...
                  PARAMS,options.numjacoptions);
     g   = -sum(G,1)'/nobs;
   catch err
@@ -310,3 +326,9 @@ if nargout>=3
   end
 end
 
+if exist('CoefficientNames','var')
+  SE = sqrt(diag(vcov));
+  params = table(params,SE,params./SE,...
+                 'VariableNames',{'Estimate' 'SE' 'tStat'},...
+                 'RowNames',CoefficientNames);
+end

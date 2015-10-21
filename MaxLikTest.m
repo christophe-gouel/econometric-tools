@@ -1,7 +1,7 @@
 function tests = MaxLikTest
 % MAXLIKTEST Runs unit-tests for MaxLik function
 
-% Copyright (C) 2014 Christophe Gouel
+% Copyright (C) 2014-2015 Christophe Gouel
 % Licensed under the Expat license
 
 tests = functiontests(localfunctions);
@@ -55,5 +55,13 @@ options.numjacoptions.Vectorized = 'on';
 verifyLessThanOrEqual(testCase,abs((MLfit.LogLikelihood-ML*N)/MLfit.LogLikelihood),5E-3)
 verifyLessThanOrEqual(testCase,abs(MLfit.Coefficients.Estimate-paropt(1:end-1)),1E-5)
 verifyLessThanOrEqual(testCase,abs((MLfit.Coefficients.SE-sqrt(diag(vcov(1:end-1,1:end-1))))./MLfit.Coefficients.SE),0.15)
+
+% Table
+LogLik = @(params,obs) -0.5*(log(params{'b3',1}^2)+log(2*pi)+(obs(:,end)- ...
+                                                  obs(:,1:end-1)*params{{'b0' ...
+                    'b1' 'b2'},1}).^2/params{'b3',1}^2);
+par0 = table(par0,'RowNames',{'b0' 'b1' 'b2' 'b3'});
+[paropttable,ML,vcov] = MaxLik(LogLik,par0,data,options);
+verifyEqual(testCase,paropttable{:,'Estimate'},paropt)
 
 end
