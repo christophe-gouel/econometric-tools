@@ -33,6 +33,7 @@ options = struct('cov',1,...
 verifyLessThanOrEqual(testCase,abs((MLfit.LogLikelihood-ML)/MLfit.LogLikelihood),5E-3)
 verifyLessThanOrEqual(testCase,abs(MLfit.Coefficients.Estimate-paropt(1:end-1)),1E-5)
 verifyLessThanOrEqual(testCase,abs((MLfit.Coefficients.SE-sqrt(diag(vcov(1:end-1,1:end-1))))./MLfit.Coefficients.SE),0.15)
+verifyLessThanOrEqual(testCase,abs((MLfit.Coefficients.SE-sqrt(diag(vcov(1:end-1,1:end-1))))./MLfit.Coefficients.SE),0.15)
 
 options.cov = 2;
 [~,~,vcov] = MaxLik(LogLik,paropt,data,options);

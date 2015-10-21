@@ -1,4 +1,4 @@
-function [params,ML,vcov,g,H,exitflag,output] = MaxLik(loglikfun,params,obs,options,varargin)
+function [params,ML,vcov,g,H,ModelCriterion,exitflag,output] = MaxLik(loglikfun,params,obs,options,varargin)
 % MAXLIK Maximizes a log-likelihood function
 %
 % PARAMS = MAXLIK(LOGLIKFUN,PARAMS,OBS) maximizes the log-likelihood function
@@ -327,8 +327,15 @@ if nargout>=3
 end
 
 if exist('CoefficientNames','var')
-  SE = sqrt(diag(vcov));
+  SE = NaN(length(ActiveParams0),1);
+  SE(ActiveParams0) = sqrt(diag(vcov));
   params = table(params,SE,params./SE,...
                  'VariableNames',{'Estimate' 'SE' 'tStat'},...
                  'RowNames',CoefficientNames);
 end
+
+k              = sum(ActiveParams0); % # estimated parameters
+ModelCriterion = struct('AIC'  , -2*ML+k*2                 ,...
+                        'AICc' , -2*ML+k*2*nobs/(nobs-k-1) ,...
+                        'BIC'  , -2*ML+k*log(nobs)         ,...
+                        'CAIC' , -2*ML+k*(log(nobs)+1));
