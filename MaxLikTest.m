@@ -30,7 +30,7 @@ options = struct('cov',1,...
 [paropt,ML,vcov] = MaxLik(LogLik,par0,data,options);
 
 %% Tests
-verifyLessThanOrEqual(testCase,abs((MLfit.LogLikelihood-ML*N)/MLfit.LogLikelihood),5E-3)
+verifyLessThanOrEqual(testCase,abs((MLfit.LogLikelihood-ML)/MLfit.LogLikelihood),5E-3)
 verifyLessThanOrEqual(testCase,abs(MLfit.Coefficients.Estimate-paropt(1:end-1)),1E-5)
 verifyLessThanOrEqual(testCase,abs((MLfit.Coefficients.SE-sqrt(diag(vcov(1:end-1,1:end-1))))./MLfit.Coefficients.SE),0.15)
 
@@ -52,7 +52,7 @@ LogLik = @(params,obs) -0.5*bsxfun(@plus,log(params(end,:).^2)+log(2*pi),...
 options.cov                      = 1;
 options.numjacoptions.Vectorized = 'on';
 [paropt,ML,vcov] = MaxLik(LogLik,par0,data,options);
-verifyLessThanOrEqual(testCase,abs((MLfit.LogLikelihood-ML*N)/MLfit.LogLikelihood),5E-3)
+verifyLessThanOrEqual(testCase,abs((MLfit.LogLikelihood-ML)/MLfit.LogLikelihood),5E-3)
 verifyLessThanOrEqual(testCase,abs(MLfit.Coefficients.Estimate-paropt(1:end-1)),1E-5)
 verifyLessThanOrEqual(testCase,abs((MLfit.Coefficients.SE-sqrt(diag(vcov(1:end-1,1:end-1))))./MLfit.Coefficients.SE),0.15)
 

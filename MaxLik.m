@@ -36,8 +36,8 @@ function [params,ML,vcov,g,H,exitflag,output] = MaxLik(loglikfun,params,obs,opti
 % arguments for LOGLIKFUN, which, in this case, takes the following form:
 % LOGLIKFUN(PARAMS,OBS,VARARGIN).
 %
-% [PARAMS,ML] = MAXLIK(LOGLIKFUN,PARAMS,OBS,...) returns the normalized
-% log-likelihood at the solution: \sum_{i=1}^n log f(params,obs_i)/n.
+% [PARAMS,ML] = MAXLIK(LOGLIKFUN,PARAMS,OBS,...) returns the log-likelihood at
+% the solution: \sum_{i=1}^n log f(params,obs_i).
 %
 % [PARAMS,ML,VCOV] = MAXLIK(LOGLIKFUN,PARAMS,OBS,...)
 %
@@ -254,7 +254,7 @@ catch err
 
 end
 params                      = ParamsTransformInv(SelectParams(PARAMS));
-ML                          = -ML;
+ML                          = -ML*nobs;
 
 %% Covariance and hessian of parameters
 
@@ -283,7 +283,7 @@ if nargout>=4 || (nargout>=3 && any(cov==[2 3]))
     H        = NaN(length(ActiveParams));
     output   = err;
     return
-    
+
   end
 end
 
@@ -297,7 +297,7 @@ if nargout>=5 || (nargout>=3 && any(cov==[1 3]))
     H        = NaN(length(ActiveParams));
     output   = err;
     return
-    
+
   end
   if all(isfinite(H(:)))
     if ~all(eig(H)>=0)
