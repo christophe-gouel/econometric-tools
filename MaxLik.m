@@ -151,11 +151,12 @@ else
   ActiveParams = ActiveParams(:)~=zeros(nparams,1);
 end
 ActiveParams0 = ActiveParams;
+k             = sum(ActiveParams0); % # estimated parameters
 
 %% Functions and matrices to extract active parameters for the estimation
-SelectParamsMat = zeros(nparams,sum(ActiveParams));
+SelectParamsMat = zeros(nparams,k);
 ind             = 1:nparams;
-SelectParamsMat(sub2ind(size(SelectParamsMat),ind(ActiveParams),1:sum(ActiveParams))) = 1;
+SelectParamsMat(sub2ind(size(SelectParamsMat),ind(ActiveParams),1:k)) = 1;
 FixedParams     = ParamsTransform(params(:,1)).*(~ActiveParams);
 SelectParams    = @(P) FixedParams(:,ones(size(P,2),1))+SelectParamsMat*P;
 PARAMS          = SelectParamsMat'*ParamsTransform(params);
@@ -170,6 +171,15 @@ for i=1:nparams
     ub(i) = ubtrans(i);
   end
 end
+
+%% Default values in case of errors
+ModelCriterion = struct('AIC'  , NaN ,...
+                        'AICc' , NaN ,...
+                        'BIC'  , NaN ,...
+                        'CAIC' , NaN);
+vcov = NaN(k,k);
+g    = NaN(length(ActiveParams),1);
+H    = NaN(length(ActiveParams));
 
 %% Maximization of the log-likelihood
 try
@@ -193,7 +203,7 @@ try
         solveroptions{i}.InitialSwarm = PARAMS';
         problem = struct('solver'   , solver{i},...
                          'objective', Objective,...
-                         'nvars'    , sum(ActiveParams),...
+                         'nvars'    , k,...
                          'lb'       , lb(ActiveParams),...
                          'ub'       , ub(ActiveParams),...
                          'options'  , solveroptions{i});
@@ -206,7 +216,7 @@ try
         solveroptions{i}.InitialPopulation = PARAMS';
         problem = struct('solver'    , solver{i},...
                          'fitnessfcn', Objective,...
-                         'nvars'     , sum(ActiveParams),...
+                         'nvars'     , k,...
                          'lb'        , lb(ActiveParams),...
                          'ub'        , ub(ActiveParams),...
                          'Aineq'     , [],...
@@ -224,7 +234,7 @@ try
         Objective = @(P) -sum(loglikfun(ToTable(ParamsTransformInv(SelectParams(P))),...
                                         obs,varargin{:}),1)/nobs;
         if strcmpi(options.Vectorized,'on'), solveroptions{i}.Vectorized = 1; end
-        problem = struct('Variables'  , sum(ActiveParams),...
+        problem = struct('Variables'  , k,...
                          'ObjFunction', Objective,...
                          'LB'         , lb(ActiveParams),...
                          'UB'         , ub(ActiveParams));
@@ -245,9 +255,6 @@ catch err
   %% Values in case of error
   params   = NaN(length(ActiveParams),1);
   ML       = NaN;
-  vcov     = NaN(length(ActiveParams));
-  g        = NaN(length(ActiveParams),1);
-  H        = NaN(length(ActiveParams));
   exitflag = 0;
   output   = err;
   return
@@ -278,9 +285,6 @@ if nargout>=4 || (nargout>=3 && any(cov==[2 3]))
     g   = -sum(G,1)'/nobs;
   catch err
     %% Values in case of error
-    vcov     = NaN(length(ActiveParams));
-    g        = NaN(length(ActiveParams),1);
-    H        = NaN(length(ActiveParams));
     output   = err;
     return
 
@@ -293,8 +297,6 @@ if nargout>=5 || (nargout>=3 && any(cov==[1 3]))
     H = numhessian(Objective,PARAMS,options.numhessianoptions);
   catch err
     %% Values in case of error
-    vcov     = NaN(length(ActiveParams));
-    H        = NaN(length(ActiveParams));
     output   = err;
     return
 
@@ -309,7 +311,6 @@ if nargout>=5 || (nargout>=3 && any(cov==[1 3]))
 end
 
 % Covariance
-vcov = NaN(sum(ActiveParams0),sum(ActiveParams0));
 if nargout>=3
   D   = diag(ParamsTransformInvDer(SelectParams(PARAMS)));
   D   = D(ActiveParams,ActiveParams);
@@ -334,7 +335,6 @@ if exist('CoefficientNames','var')
                  'RowNames',CoefficientNames);
 end
 
-k              = sum(ActiveParams0); % # estimated parameters
 ModelCriterion = struct('AIC'  , -2*ML+k*2                 ,...
                         'AICc' , -2*ML+k*2*nobs/(nobs-k-1) ,...
                         'BIC'  , -2*ML+k*log(nobs)         ,...
