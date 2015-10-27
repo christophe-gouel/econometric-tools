@@ -42,12 +42,10 @@ function [params,ML,vcov,g,H,ModelCriterion,exitflag,output] = MaxLik(loglikfun,
 % [PARAMS,ML,VCOV] = MAXLIK(LOGLIKFUN,PARAMS,OBS,...)
 %
 % [PARAMS,ML,VCOV,G] = MAXLIK(LOGLIKFUN,PARAMS,OBS,...) returns the gradient
-% with respect to the parameters of the normalized log-likelihood at the
-% solution.
+% with respect to the parameters of the log-likelihood at the solution.
 %
 % [PARAMS,ML,VCOV,G,H] = MAXLIK(LOGLIKFUN,PARAMS,OBS,...) returns the hessian
-% with respect to the parameters of the normalized log-likelihood at the
-% solution.
+% with respect to the parameters of the log-likelihood at the solution.
 %
 % [PARAMS,ML,VCOV,G,H,EXITFLAG] = MAXLIK(LOGLIKFUN,PARAMS,OBS,...) returns the
 % exitflag from the optimization solver.
@@ -273,16 +271,16 @@ SelectParamsMat(sub2ind(size(SelectParamsMat),ind(ActiveParams),1:sum(ActivePara
 FixedParams            = ParamsTransform(params).*(~ActiveParams);
 SelectParams           = @(P) FixedParams(:,ones(size(P,2),1))+SelectParamsMat*P;
 PARAMS                 = SelectParamsMat'*ParamsTransform(params);
-Objective = @(P) -sum(loglikfun(ToTable(ParamsTransformInv(SelectParams(P))),...
-                                obs,varargin{:}),1)/nobs;
 
 % Gradient
 if nargout>=4 || (nargout>=3 && any(cov==[2 3]))
   try
+    % Matrix of contributions to the gradient
     G   = numjac(@(P) loglikfun(ToTable(ParamsTransformInv(SelectParams(P))),...
                                 obs,varargin{:}),...
                  PARAMS,options.numjacoptions);
-    g   = -sum(G,1)'/nobs;
+    % Score (gradient) vector:
+    g   = sum(G,1)';
   catch err
     %% Values in case of error
     output   = err;
@@ -294,7 +292,9 @@ end
 % Hessian
 if nargout>=5 || (nargout>=3 && any(cov==[1 3]))
   try
-    H = numhessian(Objective,PARAMS,options.numhessianoptions);
+    H = numhessian(@(P) sum(loglikfun(ToTable(ParamsTransformInv(SelectParams(P))),... 
+                                      obs,varargin{:}),1),...
+                   PARAMS,options.numhessianoptions);
   catch err
     %% Values in case of error
     output   = err;
@@ -302,8 +302,8 @@ if nargout>=5 || (nargout>=3 && any(cov==[1 3]))
 
   end
   if all(isfinite(H(:)))
-    if ~all(eig(H)>=0)
-      warning('MaxLik:HessNotPosDef','Hessian is not positive definite')
+    if ~all(eig(H)<=0)
+      warning('MaxLik:HessNotPosDef','Hessian is not negative definite')
     end
   else
     warning('MaxLik:HessInfElements','Hessian has infinite elements')
@@ -317,25 +317,31 @@ if nargout>=3
   ind = ActiveParams(ActiveParams0);
   switch cov
     case 1
-      vcov(ind,ind) = D'*(H\D)/nobs;
+      vcov(ind,ind) = -D'*(H\D);
     case 2
       vcov(ind,ind) = D'*((G'*G)\D);
     case 3
-      vcov(ind,ind) = D'*(H\(G'*G)/H)*D/nobs^2;
+      vcov(ind,ind) = D'*(H\(G'*G)/H)*D;
     otherwise
       vcov = [];
   end
 end
 
 if exist('CoefficientNames','var')
-  SE = NaN(length(ActiveParams0),1);
+  SE = zeros(length(ActiveParams0),1);
   SE(ActiveParams0) = sqrt(diag(vcov));
   params = table(params,SE,params./SE,...
                  'VariableNames',{'Estimate' 'SE' 'tStat'},...
                  'RowNames',CoefficientNames);
 end
 
-ModelCriterion = struct('AIC'  , -2*ML+k*2                 ,...
-                        'AICc' , -2*ML+k*2*nobs/(nobs-k-1) ,...
-                        'BIC'  , -2*ML+k*log(nobs)         ,...
-                        'CAIC' , -2*ML+k*(log(nobs)+1));
+if exist('G','var')
+  nactiveobs = size(G,1);
+else
+  nactiveobs = size(loglikfun(ToTable(ParamsTransformInv(SelectParams(PARAMS))),...
+                              obs,varargin{:}),1);
+end
+ModelCriterion = struct('AIC'  , -2*ML+k*2                             ,...
+                        'AICc' , -2*ML+k*2*nactiveobs/(nactiveobs-k-1) ,...
+                        'BIC'  , -2*ML+k*log(nactiveobs)               ,...
+                        'CAIC' , -2*ML+k*(log(nactiveobs)+1));
