@@ -106,12 +106,11 @@ if ischar(options.solver)
   solver              = {options.solver};
 else
   solver              = options.solver;
-
 end
-if isstruct(options.solveroptions)
-  solveroptions       = {options.solveroptions};
-else
+if iscell(options.solveroptions)
   solveroptions       = options.solveroptions;
+else
+  solveroptions       = {options.solveroptions};
 end
 validateattributes(solveroptions,{'cell'},{'numel',numel(solver)})
 
@@ -195,6 +194,22 @@ try
                          'options'  , solveroptions{i});
         [PARAMS,ML,exitflag,output] = feval(solver{i},problem);
 
+      case 'multistart'
+        Objective = @(P) -sum(loglikfun(ToTable(ParamsTransformInv(SelectParams(P'))),...
+                                        obs,varargin{:}),1)/nobs;
+        problem = createOptimProblem(             options.subsolver,...
+                                     'x0'       , PARAMS(:,1)',...
+                                     'objective', Objective,...
+                                     'lb'       , lb(ActiveParams),...
+                                     'ub'       , ub(ActiveParams),...
+                                     'options'  , solveroptions{i});
+        startpts = CustomStartPointSet(PARAMS');
+        ms = MultiStart('StartPointsToRun','bounds-ineqs',...
+                        'UseParallel',true);
+        [PARAMS,ML,exitflag,output,solutions] = run(ms,problem,startpts);
+        output.solutions = solutions;
+        PARAMS = PARAMS';
+        
       case 'particleswarm'
         Objective = @(P) -sum(loglikfun(ToTable(ParamsTransformInv(SelectParams(P'))),...
                                         obs,varargin{:}),1)'/nobs;
