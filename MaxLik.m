@@ -66,7 +66,7 @@ nparams = size(params,1);
 defaultopt = struct('ActiveParams'         , []                          ,...
                     'bounds'               , struct('lb',-inf(nparams,1) ,...
                                                     'ub', inf(nparams,1)),...
-                    'cov'                  , 3                           ,...
+                    'cov'                  , 2                           ,...
                     'numhessianoptions'    , struct()                    ,...
                     'numjacoptions'        , struct()                    ,...
                     'ParamsTransform'      , @(P) P                      ,...
@@ -120,7 +120,7 @@ validateattributes(params,{'numeric','table'},{'2d'},2)
 
 if isa(params,'table')
   CoefficientNames = params.Properties.RowNames;
-  params = params{:,:};
+  params = params{:,1};
   ToTable = @(Estimate) table(Estimate,'RowNames',CoefficientNames);
 else
   ToTable = @(P) P;
@@ -328,13 +328,16 @@ if nargout>=3
 end
 
 if exist('CoefficientNames','var')
-  SE = zeros(length(ActiveParams0),1);
+  SE    = zeros(length(ActiveParams0),1);
   SE(ActiveParams0) = sqrt(diag(vcov));
-  params = table(params,SE,params./SE,...
+  tStat = NaN(length(ActiveParams0),1);
+  tStat(ActiveParams0) = params(ActiveParams0)./SE(ActiveParams0);
+  params = table(params,SE,tStat,...
                  'VariableNames',{'Estimate' 'SE' 'tStat'},...
                  'RowNames',CoefficientNames);
 end
 
+%% Model criterion
 if exist('G','var')
   nactiveobs = size(G,1);
 else
