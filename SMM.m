@@ -1,0 +1,321 @@
+function [params,M,vcov,G,exitflag,output] = SMM(model,params,obs,options,varargin)
+% SMM Maximizes a log-likelihood function
+%
+% PARAMS = SMM(MODEL,PARAMS,OBS) maximizes the log-likelihood function
+% MODEL with respect to parameters with initial values PARAMS and using the
+% observables OBS. PARAMS is either a matrix or a table with parameters in rows.
+%
+% PARAMS = SMM(MODEL,PARAMS,OBS,OPTIONS) maximizes the log-likelihood
+% function with the parameters defined by the structure OPTIONS. The fields of
+% the structure are
+%   ActiveParams          :
+%   numjacoptions         : structure of options to be passed to the function
+%                           numjac that can be used to calculate the jacobian
+%                           for the covariance matrix of the parameters.
+%   ParamsTransform       :
+%   ParamsTransformInv    :
+%   ParamsTransformInvDer :
+%   solver                : a string or a cell array of string that indicates
+%                           the optimization solvers to use successively.
+%                           Possible values are 'fmincon', 'fminunc' (default),
+%                           'fminsearch', 'ga', 'particleswarm', 'patternsearch',
+%                           or 'pswarm'
+%   solveroptions         : options structure or cell array of options to be
+%                           passed to the solvers maximizing the likelihood.
+%
+% PARAMS = SMM(MODEL,PARAMS,OBS,OPTIONS,VARARGIN) provides additional
+% arguments for MODEL, which, in this case, takes the following form:
+% MODEL(PARAMS,OBS,VARARGIN).
+%
+% [PARAMS,M] = SMM(MODEL,PARAMS,OBS,...) returns the log-likelihood at
+% the solution: \sum_{i=1}^n log f(params,obs_i).
+%
+% [PARAMS,M,VCOV] = SMM(MODEL,PARAMS,OBS,...)
+%
+% [PARAMS,M,VCOV,G] = SMM(MODEL,PARAMS,OBS,...) returns the gradient
+% with respect to the parameters of the log-likelihood at the solution.
+%
+% [PARAMS,M,VCOV,G,EXITFLAG] = SMM(MODEL,PARAMS,OBS,...) returns the
+% exitflag from the optimization solver.
+%
+% [PARAMS,M,VCOV,G,EXITFLAG,OUTPUT] = SMM(MODEL,PARAMS,OBS,...)
+% returns a structure OUTPUT from the optimization solver that contains
+% information about the optimization.
+%
+% See also FMINSEARCH, FMINUNC, NUMJAC.
+
+% Copyright (C) 2019 Christophe Gouel
+% Licensed under the Expat license
+
+%% Initialization
+
+nparams = size(params,1);
+
+defaultopt = struct('ActiveParams'         , []                          ,...
+                    'bounds'               , struct('lb',-inf(nparams,1) ,...
+                                                    'ub', inf(nparams,1)),...
+                    'nrep'                 , 10                          ,...
+                    'numjacoptions'        , struct()                    ,...
+                    'ParamsTransform'      , @(P) P                      ,...
+                    'ParamsTransformInv'   , @(P) P                      ,...
+                    'ParamsTransformInvDer', @(P) ones(size(P))          ,...
+                    'solver'               , {'fminunc'}                 ,...
+                    'solveroptions'        , {struct()}                  ,...
+                    'TestParamsTransform'  , true                        ,...
+                    'weightingmatrixoptions', struct('wtype' , 'i',...
+                                                     'wlags' , 0  ,...
+                                                     'center', 1));
+if nargin < 4 || isempty(options)
+  options = defaultopt;
+else
+  warning('off','catstruct:DuplicatesFound')
+  if isfield(options,'bounds')
+    options.bounds = catstruct(defaultopt.bounds,options.bounds);
+  end
+  if isfield(options,'numjacoptions')
+    options.numjacoptions = catstruct(defaultopt.numjacoptions,...
+                                      options.numjacoptions);
+  end
+  if isfield(options,'weightingmatrixoptions')
+    options.weightingmatrixoptions = catstruct(defaultopt.weightingmatrixoptions,...
+                                               options.weightingmatrixoptions);
+  end
+  options = catstruct(defaultopt,options);
+end
+
+ActiveParams          = options.ActiveParams;
+ParamsTransform       = options.ParamsTransform;
+ParamsTransformInv    = options.ParamsTransformInv;
+ParamsTransformInvDer = options.ParamsTransformInvDer;
+if ischar(options.solver)
+  solver              = {options.solver};
+else
+  solver              = options.solver;
+end
+if iscell(options.solveroptions)
+  solveroptions       = options.solveroptions;
+else
+  solveroptions       = {options.solveroptions};
+end
+validateattributes(solveroptions,{'cell'},{'numel',numel(solver)})
+weightingmatrixoptions = options.weightingmatrixoptions;
+
+validateattributes(model,{'struct'},{},1)
+validateattributes(params,{'numeric','table'},{'2d'},2)
+
+if isa(params,'table')
+  CoefficientNames = params.Properties.RowNames;
+  params = params{:,1};
+  ToTable = @(Estimate) table(Estimate,'RowNames',CoefficientNames);
+else
+  ToTable = @(P) P;
+end
+
+nobs0 = size(obs,1);
+nrep  = options.nrep;
+
+if options.TestParamsTransform && ...
+      norm(ParamsTransformInv(ParamsTransform(params(:,1)))-params(:,1))>=sqrt(eps)
+  error('Functions to transform parameters are not inverse of each other')
+end
+
+if options.TestParamsTransform && ...
+      norm(diag(numjac(@(P) ParamsTransformInv(P),ParamsTransform(params(:,1))))...
+           -ParamsTransformInvDer(ParamsTransform(params(:,1))))>=1E-6
+  error(['The function to differentiate transformed parameters does not correspond ' ...
+         'to its finite difference gradient.'])
+end
+
+if isempty(ActiveParams)
+  ActiveParams = true(nparams,1);
+else
+  validateattributes(ActiveParams,{'logical','numeric'},{'vector','numel',nparams})
+  ActiveParams = ActiveParams(:)~=zeros(nparams,1);
+end
+ActiveParams0 = ActiveParams;
+nactparams    = sum(ActiveParams0); % # estimated parameters
+
+%% Functions and matrices to extract active parameters for the estimation
+SelectParamsMat = zeros(nparams,nactparams);
+ind             = 1:nparams;
+SelectParamsMat(sub2ind(size(SelectParamsMat),ind(ActiveParams),1:nactparams)) = 1;
+FixedParams     = ParamsTransform(params(:,1)).*(~ActiveParams);
+SelectParams    = @(P) FixedParams(:,ones(size(P,2),1))+SelectParamsMat*P;
+PARAMS          = SelectParamsMat'*ParamsTransform(params);
+
+lb = -inf(nparams,1);
+ub = +inf(nparams,1);
+lbtrans = min(ParamsTransform(options.bounds.lb),ParamsTransform(options.bounds.ub));
+ubtrans = max(ParamsTransform(options.bounds.lb),ParamsTransform(options.bounds.ub));
+for i=1:nparams
+  if any(isfinite([options.bounds.lb(i) options.bounds.ub(i)]))
+    lb(i) = lbtrans(i);
+    ub(i) = ubtrans(i);
+  end
+end
+
+%% Observed moments
+moments_fun  = model.moments_fun;
+moments_obs  = moments_fun(obs);
+W            = WeightingMatrix(moments_obs,...
+                               weightingmatrixoptions.wtype,...
+                               weightingmatrixoptions.wlags,...
+                               weightingmatrixoptions.center);
+W = inv(W);
+Emoments_obs = mean(moments_obs);
+
+[nobs1,nmom] = size(moments_obs);
+nsim = nobs1 * (nrep - 1) + nobs0;
+nlost = nobs0 - nobs1;
+
+SimMoments   = @(P) moments_fun(model.simulate(P,nsim,varargin{:}));
+
+%% Default values in case of errors
+vcov = NaN(nactparams,nactparams);
+G    = NaN(nmom,nactparams);
+
+%% Maximization of the log-likelihood
+try
+  for i=1:length(solver)
+    switch lower(solver{i})
+      case {'fmincon','fminunc','fminsearch','patternsearch'}
+        %% MATLAB solvers
+        Objective = @(P) SMMObj(ToTable(ParamsTransformInv(SelectParams(P))));
+        problem = struct('objective', Objective,...
+                         'x0'       , PARAMS,...
+                         'solver'   , solver{i},...
+                         'lb'       , lb(ActiveParams),...
+                         'ub'       , ub(ActiveParams),...
+                         'options'  , solveroptions{i});
+        [PARAMS,M,exitflag,output] = feval(solver{i},problem);
+
+      case 'multistart'
+        Objective = @(P) SMMObj(ToTable(ParamsTransformInv(SelectParams(P)')));
+        problem = createOptimProblem(             options.subsolver,...
+                                     'x0'       , PARAMS(:,1)',...
+                                     'objective', Objective,...
+                                     'lb'       , lb(ActiveParams),...
+                                     'ub'       , ub(ActiveParams),...
+                                     'options'  , solveroptions{i});
+        startpts = CustomStartPointSet(PARAMS');
+        ms = MultiStart('StartPointsToRun','bounds-ineqs',...
+                        'UseParallel',true);
+        [PARAMS,M,exitflag,output,solutions] = run(ms,problem,startpts);
+        output.solutions = solutions;
+        PARAMS = PARAMS';
+
+      case 'particleswarm'
+        Objective = @(P) SMMObj(ToTable(ParamsTransformInv(SelectParams(P)')));
+        solveroptions{i}.InitialSwarm = PARAMS';
+        problem = struct('solver'   , solver{i},...
+                         'objective', Objective,...
+                         'nvars'    , nactparams,...
+                         'lb'       , lb(ActiveParams),...
+                         'ub'       , ub(ActiveParams),...
+                         'options'  , solveroptions{i});
+        [PARAMS,M,exitflag,output] = feval(solver{i},problem);
+        PARAMS = PARAMS';
+
+      case 'ga'
+        Objective = @(P) SMMObj(ToTable(ParamsTransformInv(SelectParams(P)')));
+        solveroptions{i}.InitialPopulation = PARAMS';
+        problem = struct('solver'    , solver{i},...
+                         'fitnessfcn', Objective,...
+                         'nvars'     , nactparams,...
+                         'lb'        , lb(ActiveParams),...
+                         'ub'        , ub(ActiveParams),...
+                         'Aineq'     , [],...
+                         'Bineq'     , [],...
+                         'Aeq'       , [],...
+                         'Beq'       , [],...
+                         'nonlcon'   , [],...
+                         'intcon'    , [],...
+                         'options'   , solveroptions{i});
+        [PARAMS,M,exitflag,output] = feval(solver{i},problem);
+        PARAMS = PARAMS';
+
+      case 'pswarm'
+        %% PSwarm
+        Objective = @(P) SMMObj(ToTable(ParamsTransformInv(SelectParams(P))));
+        problem = struct('Variables'  , nactparams,...
+                         'ObjFunction', Objective,...
+                         'LB'         , lb(ActiveParams),...
+                         'UB'         , ub(ActiveParams));
+        InitialPopulation = cell2struct(mat2cell(PARAMS,...
+                                                 size(PARAMS,1),...
+                                                 ones(1,size(PARAMS,2))),...
+                                        'x');
+        [PARAMS,M,output] = PSwarm(problem,InitialPopulation,solveroptions{i});
+        exitflag = 1;
+
+      otherwise
+        error(['Invalid value for OPTIONS field solver: must be ' ...
+               '''fmincon'', ''fminunc'', ''fminsearch'', ''ga'', ''particleswarm'', ' ...
+               '''patternsearch'', or ''pswarm''']);
+    end
+  end
+catch err
+  %% Values in case of error
+  params   = NaN(length(ActiveParams),1);
+  M        = NaN;
+  exitflag = 0;
+  output   = err;
+  return
+
+end
+params                      = ParamsTransformInv(SelectParams(PARAMS));
+
+%% Covariance of parameters
+
+% Covariance is only calculated for parameters that are not at their bounds
+AtBounds               = params==options.bounds.lb | params==options.bounds.ub;
+ActiveParams(AtBounds) = 0;
+SelectParamsMat        = zeros(nparams,sum(ActiveParams));
+SelectParamsMat(sub2ind(size(SelectParamsMat),ind(ActiveParams),1:sum(ActiveParams))) = 1;
+FixedParams            = ParamsTransform(params).*(~ActiveParams);
+SelectParams           = @(P) FixedParams(:,ones(size(P,2),1))+SelectParamsMat*P;
+PARAMS                 = SelectParamsMat'*ParamsTransform(params);
+nactparams             = sum(ActiveParams);
+
+% Gradient
+if nargout>=4 || nargout>=3
+  try
+    % Matrix of contributions to the gradient
+    vec = @(y) y(:);
+    G   = numjac(@(P) vec(SimMoments(ToTable(ParamsTransformInv(SelectParams(P))))),...
+                 PARAMS,options.numjacoptions); % (nsim*nmom,nactparams)
+    G   = reshape(G,nsim-nlost,nmom,nactparams);      % (nsim,nmom,nactparams)
+    J   = squeeze(mean(G,1));                   % (nmom,nactparams)
+  catch err
+    %% Values in case of error
+    output   = err;
+    return
+  end
+end
+
+% Covariance
+if nargout>=3
+  D   = diag(ParamsTransformInvDer(SelectParams(PARAMS)));
+  D   = D(ActiveParams,ActiveParams);
+  ind = ActiveParams(ActiveParams0);
+  vcov(ind,ind) = (1 + 1 / nrep) * inv(D' * J' * W * J * D) / nobs0; %#ok
+end
+
+if exist('CoefficientNames','var')
+  SE    = zeros(length(ActiveParams0),1);
+  SE(ActiveParams0) = sqrt(diag(vcov));
+  tStat = NaN(length(ActiveParams0),1);
+  tStat(ActiveParams0) = params(ActiveParams0)./SE(ActiveParams0);
+  params = table(params,SE,tStat,...
+                 'VariableNames',{'Estimate' 'SE' 'tStat'},...
+                 'RowNames',CoefficientNames);
+end
+
+  function Obj = SMMObj(par)
+
+  M   = Emoments_obs - mean(SimMoments(par));
+  Obj = M * W * M';
+
+  end
+
+end
