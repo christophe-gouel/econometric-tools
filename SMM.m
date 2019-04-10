@@ -1,4 +1,4 @@
-function [params,M,vcov,G,exitflag,output] = SMM(model,params,obs,options,varargin)
+function [params,Obj,vcov,G,exitflag,output] = SMM(model,params,obs,options,varargin)
 % SMM Maximizes a log-likelihood function
 %
 % PARAMS = SMM(MODEL,PARAMS,OBS) maximizes the log-likelihood function
@@ -27,18 +27,18 @@ function [params,M,vcov,G,exitflag,output] = SMM(model,params,obs,options,vararg
 % arguments for MODEL, which, in this case, takes the following form:
 % MODEL(PARAMS,OBS,VARARGIN).
 %
-% [PARAMS,M] = SMM(MODEL,PARAMS,OBS,...) returns the log-likelihood at
-% the solution: \sum_{i=1}^n log f(params,obs_i).
+% [PARAMS,OBJ] = SMM(MODEL,PARAMS,OBS,...) returns the value of the
+% objective at the solution.
 %
-% [PARAMS,M,VCOV] = SMM(MODEL,PARAMS,OBS,...)
+% [PARAMS,OBJ,VCOV] = SMM(MODEL,PARAMS,OBS,...)
 %
-% [PARAMS,M,VCOV,G] = SMM(MODEL,PARAMS,OBS,...) returns the gradient
+% [PARAMS,OBJ,VCOV,G] = SMM(MODEL,PARAMS,OBS,...) returns the gradient
 % with respect to the parameters of the log-likelihood at the solution.
 %
-% [PARAMS,M,VCOV,G,EXITFLAG] = SMM(MODEL,PARAMS,OBS,...) returns the
+% [PARAMS,OBJ,VCOV,G,EXITFLAG] = SMM(MODEL,PARAMS,OBS,...) returns the
 % exitflag from the optimization solver.
 %
-% [PARAMS,M,VCOV,G,EXITFLAG,OUTPUT] = SMM(MODEL,PARAMS,OBS,...)
+% [PARAMS,OBJ,VCOV,G,EXITFLAG,OUTPUT] = SMM(MODEL,PARAMS,OBS,...)
 % returns a structure OUTPUT from the optimization solver that contains
 % information about the optimization.
 %
@@ -187,7 +187,7 @@ try
                          'lb'       , lb(ActiveParams),...
                          'ub'       , ub(ActiveParams),...
                          'options'  , solveroptions{i});
-        [PARAMS,M,exitflag,output] = feval(solver{i},problem);
+        [PARAMS,Obj,exitflag,output] = feval(solver{i},problem);
 
       case 'multistart'
         Objective = @(P) SMMObj(ToTable(ParamsTransformInv(SelectParams(P)')));
@@ -200,7 +200,7 @@ try
         startpts = CustomStartPointSet(PARAMS');
         ms = MultiStart('StartPointsToRun','bounds-ineqs',...
                         'UseParallel',true);
-        [PARAMS,M,exitflag,output,solutions] = run(ms,problem,startpts);
+        [PARAMS,Obj,exitflag,output,solutions] = run(ms,problem,startpts);
         output.solutions = solutions;
         PARAMS = PARAMS';
 
@@ -213,7 +213,7 @@ try
                          'lb'       , lb(ActiveParams),...
                          'ub'       , ub(ActiveParams),...
                          'options'  , solveroptions{i});
-        [PARAMS,M,exitflag,output] = feval(solver{i},problem);
+        [PARAMS,Obj,exitflag,output] = feval(solver{i},problem);
         PARAMS = PARAMS';
 
       case 'ga'
@@ -231,7 +231,7 @@ try
                          'nonlcon'   , [],...
                          'intcon'    , [],...
                          'options'   , solveroptions{i});
-        [PARAMS,M,exitflag,output] = feval(solver{i},problem);
+        [PARAMS,Obj,exitflag,output] = feval(solver{i},problem);
         PARAMS = PARAMS';
 
       case 'pswarm'
@@ -245,7 +245,7 @@ try
                                                  size(PARAMS,1),...
                                                  ones(1,size(PARAMS,2))),...
                                         'x');
-        [PARAMS,M,output] = PSwarm(problem,InitialPopulation,solveroptions{i});
+        [PARAMS,Obj,output] = PSwarm(problem,InitialPopulation,solveroptions{i});
         exitflag = 1;
 
       otherwise
