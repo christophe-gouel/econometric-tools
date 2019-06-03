@@ -258,6 +258,7 @@ catch err
   %% Values in case of error
   params   = NaN(length(ActiveParams),1);
   M        = NaN;
+  Obj      = NaN;
   exitflag = 0;
   output   = err;
   return
