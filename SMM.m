@@ -157,10 +157,15 @@ end
 %% Observed moments
 moments_fun  = model.moments_fun;
 moments_obs  = moments_fun(obs);
-W            = WeightingMatrix(moments_obs,...
-                               weightingmatrixoptions.wtype,...
-                               weightingmatrixoptions.wlags,...
-                               weightingmatrixoptions.center);
+switch lower(weightingmatrixoptions.wtype)
+  case 'bb' % for block bootstrap
+    W = WeightingMatrixBB(model,obs);
+  otherwise
+    W = WeightingMatrix(moments_obs,...
+                        weightingmatrixoptions.wtype,...
+                        weightingmatrixoptions.wlags,...
+                        weightingmatrixoptions.center);
+end
 W = inv(W);
 Emoments_obs = mean(moments_obs);
 
