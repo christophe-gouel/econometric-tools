@@ -1,15 +1,16 @@
-function [W, m_BB] = WeightingMatrixBB(model,Obs,N_BB)
+function [W, m_BB] = WeightingMatrixBB(moments_fun,Obs,N_BB,block_length)
 
-% File ispired from Frankel and Westerhoff (Appendix B JEDC, 2012)
+% File inspired from Frankel and Westerhoff (2012, JEDC, Appendix B)
 
+if nargin < 4, block_length = []; end
+if nargin < 3 || isempty(N_BB), N_BB = 1E2*size(Obs,1); end
 
-if nargin<3,  N_BB = 1E2*size(Obs,1); end
-
-moments_fun  = model.moments_fun;
+m0   = mean(moments_fun(Obs));
+m_BB = NaN(N_BB,size(m0,2));
 for i = 1:N_BB
-  Ybb         = OverlapBBoot(Obs);  
+  Ybb         = OverlapBBoot(Obs,block_length);
   m_BB(i,:)   = mean(moments_fun(Ybb));
 end
 
-m = m_BB- mean(m_BB);
+m = m_BB - mean(m_BB);
 W = (m'*m) / N_BB;
