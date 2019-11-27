@@ -169,6 +169,7 @@ switch lower(weightingmatrixoptions.wtype)
                         weightingmatrixoptions.center);
 end
 W = inv(W);
+W = W/sqrt(max(W(:)));
 Emoments_obs = mean(moments_obs);
 
 [nobs1,nmom] = size(moments_obs);
@@ -188,14 +189,14 @@ try
       case {'fmincon','fminunc','fminsearch','patternsearch'}
         %% MATLAB solvers
         Objective = @(P) SMMObj(ToTable(ParamsTransformInv(SelectParams(P))));
-        if any(isfinite([options.bounds.lb; options.bounds.ub])) && ...
-              strcmpi(solver{i}, 'fminsearch')
-          [PARAMS,Obj,exitflag,output] = fminsearchbnd(Objective,...
-                                                       PARAMS,...
-                                                       lb(ActiveParams),...
-                                                       ub(ActiveParams),...
-                                                       solveroptions{i});
-        else
+%         if any(isfinite([options.bounds.lb; options.bounds.ub])) && ...
+%               strcmpi(solver{i}, 'fminsearch')
+%           [PARAMS,Obj,exitflag,output] = fminsearchbnd(Objective,...
+%                                                        PARAMS,...
+%                                                        lb(ActiveParams),...
+%                                                        ub(ActiveParams),...
+%                                                        solveroptions{i});
+%         else
           problem = struct('objective', Objective,...
                            'x0'       , PARAMS,...
                            'solver'   , solver{i},...
@@ -203,7 +204,7 @@ try
                            'ub'       , ub(ActiveParams),...
                            'options'  , solveroptions{i});
           [PARAMS,Obj,exitflag,output] = feval(solver{i},problem);
-        end
+%         end
 
       case 'multistart'
         Objective = @(P) SMMObj(ToTable(ParamsTransformInv(SelectParams(P)')));
@@ -329,9 +330,13 @@ if exist('CoefficientNames','var')
 end
 
   function Obj = SMMObj(par)
-
-  M   = Emoments_obs - mean(SimMoments(par));
-  Obj = M * W * M';
+    
+  if any(lb > par) || any(par > ub)
+    Obj = Inf;
+  else
+    M   = Emoments_obs - mean(SimMoments(par));
+    Obj = M * W * M';
+  end
 
   end
 
