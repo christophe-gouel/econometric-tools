@@ -168,8 +168,18 @@ switch lower(weightingmatrixoptions.wtype)
                         weightingmatrixoptions.wlags,...
                         weightingmatrixoptions.center);
 end
+% Test if weighting matrix is full-ranked
+if rank(W) < size(W,1)
+  params   = NaN(length(ActiveParams),1);
+  M        = NaN;
+  Obj      = NaN;
+  exitflag = 0;
+  vcov     = NaN(nactparams,nactparams);
+  G        = NaN(size(W,1),nactparams);
+  output   = 'Weighting matrix is not full rank';
+  return
+end
 W = inv(W);
-W = W/sqrt(max(W(:)));
 Emoments_obs = mean(moments_obs);
 
 [nobs1,nmom] = size(moments_obs);
