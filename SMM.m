@@ -263,7 +263,14 @@ try
                                         'x');
         [PARAMS,Obj,output] = PSwarm(problem,InitialPopulation,solveroptions{i});
         exitflag = 1;
-
+        
+      case 'lesage'
+        Objective = @(P) SMMObj(ToTable(ParamsTransformInv(SelectParams(P))));
+        output = maxlik(Objective, PARAMS, solveroptions{i});
+        PARAMS = output.b;
+        Obj = output.f;
+        exitflag = 1;
+        
       otherwise
         error(['Invalid value for OPTIONS field solver: must be ' ...
                '''fmincon'', ''fminunc'', ''fminsearch'', ''ga'', ''particleswarm'', ' ...
