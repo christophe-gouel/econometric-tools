@@ -168,7 +168,21 @@ switch lower(weightingmatrixoptions.wtype)
                         weightingmatrixoptions.wlags,...
                         weightingmatrixoptions.center);
 end
-W = pinv(W);
+try
+  W = pinv(W);
+catch err
+  %% Values in case of error
+  params   = NaN(length(ActiveParams),1);
+  M        = NaN;
+  Obj      = NaN;
+  exitflag = 0;
+  vcov     = NaN(nactparams,nactparams);
+  G        = NaN(size(W,1),nactparams);
+  output   = err;
+  return
+
+end
+  
 Emoments_obs = mean(moments_obs);
 
 [nobs1,nmom] = size(moments_obs);
@@ -188,22 +202,13 @@ try
       case {'fmincon','fminunc','fminsearch','patternsearch'}
         %% MATLAB solvers
         Objective = @(P) SMMObj(ToTable(ParamsTransformInv(SelectParams(P))));
-%         if any(isfinite([options.bounds.lb; options.bounds.ub])) && ...
-%               strcmpi(solver{i}, 'fminsearch')
-%           [PARAMS,Obj,exitflag,output] = fminsearchbnd(Objective,...
-%                                                        PARAMS,...
-%                                                        lb(ActiveParams),...
-%                                                        ub(ActiveParams),...
-%                                                        solveroptions{i});
-%         else
-          problem = struct('objective', Objective,...
-                           'x0'       , PARAMS,...
-                           'solver'   , solver{i},...
-                           'lb'       , lb(ActiveParams),...
-                           'ub'       , ub(ActiveParams),...
-                           'options'  , solveroptions{i});
-          [PARAMS,Obj,exitflag,output] = feval(solver{i},problem);
-%         end
+        problem = struct('objective', Objective,...
+                         'x0'       , PARAMS,...
+                         'solver'   , solver{i},...
+                         'lb'       , lb(ActiveParams),...
+                         'ub'       , ub(ActiveParams),...
+                         'options'  , solveroptions{i});
+        [PARAMS,Obj,exitflag,output] = feval(solver{i},problem);
 
       case 'multistart'
         Objective = @(P) SMMObj(ToTable(ParamsTransformInv(SelectParams(P)')));
@@ -274,7 +279,7 @@ try
       otherwise
         error(['Invalid value for OPTIONS field solver: must be ' ...
                '''fmincon'', ''fminunc'', ''fminsearch'', ''ga'', ''particleswarm'', ' ...
-               '''patternsearch'', or ''pswarm''']);
+               '''patternsearch'', ''pswarm'', or ''lesage''']);
     end
   end
 catch err
