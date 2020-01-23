@@ -182,7 +182,7 @@ catch err
   return
 
 end
-  
+
 Emoments_obs = mean(moments_obs);
 
 [nobs1,nmom] = size(moments_obs);
@@ -268,14 +268,14 @@ try
                                         'x');
         [PARAMS,Obj,output] = PSwarm(problem,InitialPopulation,solveroptions{i});
         exitflag = 1;
-        
+
       case 'lesage'
         Objective = @(P) SMMObj(ToTable(ParamsTransformInv(SelectParams(P))));
         output = maxlik(Objective, PARAMS, solveroptions{i});
         PARAMS = output.b;
         Obj = output.f;
         exitflag = 1;
-        
+
       otherwise
         error(['Invalid value for OPTIONS field solver: must be ' ...
                '''fmincon'', ''fminunc'', ''fminsearch'', ''ga'', ''particleswarm'', ' ...
@@ -327,7 +327,7 @@ if nargout>=3
   D   = diag(ParamsTransformInvDer(SelectParams(PARAMS)));
   D   = D(ActiveParams,ActiveParams);
   ind = ActiveParams(ActiveParams0);
-  vcov(ind,ind) = (1 + 1 / nrep) * inv(D' * J' * W * J * D) / nobs0; %#ok
+  vcov(ind,ind) = (1 + 1 / nrep) * D' * inv(J' * W * J) * D / nobs0; %#ok
 end
 
 if exist('CoefficientNames','var')
@@ -341,7 +341,7 @@ if exist('CoefficientNames','var')
 end
 
   function Obj = SMMObj(par)
-    
+
   if any(lb > par) || any(par > ub)
     Obj = Inf;
   else
