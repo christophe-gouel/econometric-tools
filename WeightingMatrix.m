@@ -1,11 +1,12 @@
-function W = WeightingMatrix(m,wtype,wlags,center)
+function W = WeightingMatrix(m,wtype,wlags,center,diagonly)
 
 % File modified from the SGMM MATLAB toolbox
 % (http://www.yildiz.edu.tr/~tastan/SGMM.html)
 
-if nargin<4 || isempty(center), center = 1; end
-if nargin<3 || isempty(wlags),  wlags = 0; end
-if nargin<2 || isempty(wtype),  wtype = 'i'; end
+if nargin < 5 || isempty(diagonly), diagonly = 0;    end
+if nargin < 4 || isempty(center),   center = 1;      end
+if nargin < 3 || isempty(wlags),    wlags = 0;       end
+if nargin < 2 || isempty(wtype),    wtype = 'i';     end
 
 if center, m = m - mean(m); end
 
@@ -31,5 +32,5 @@ for i = 1:wlags
   temp = m(1:end-i,:)' * m(i+1:end,:);
   W = W + w(i) * (temp + temp');
 end
-%W = inv(W);
 
+if diagonly, W = diag(diag(W)); end
