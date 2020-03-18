@@ -203,8 +203,9 @@ MaxIter_names = {'MaxIter', 'MaxIterations'};
 ismaxiter = isfield(solveroptions{1}, MaxIter_names);
 if any(ismaxiter)
   tosolve = getfield(solveroptions{1}, MaxIter_names{ismaxiter}) ~= 0; %#ok
+  if isempty(tosolve), tosolve = true; end
 else
-  tosolve = TRUE;
+  tosolve = true;
 end
 
 if tosolve
@@ -288,10 +289,19 @@ if tosolve
           Obj = output.f;
           exitflag = 1;
 
+        case 'opti'
+          %% OPTI toolbox (https://inverseproblem.co.nz/OPTI/index.php)
+          Objective = @(P) SMMObj(ToTable(ParamsTransformInv(SelectParams(P))));
+          problem = opti('fun'    ,Objective,...
+                         'x0'     ,PARAMS,...
+                         'bounds' ,lb(ActiveParams),ub(ActiveParams),...
+                         'options',solveroptions{i});
+          [PARAMS,Obj,exitflag,output] = solve(problem);
+
         otherwise
           error(['Invalid value for OPTIONS field solver: must be ' ...
                  '''fmincon'', ''fminunc'', ''fminsearch'', ''ga'', ''particleswarm'', ' ...
-                 '''patternsearch'', ''pswarm'', or ''lesage''']);
+                 '''patternsearch'', ''pswarm'', ''lesage'', or ''opti''']);
       end
     end
   catch err
