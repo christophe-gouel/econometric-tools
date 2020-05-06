@@ -39,8 +39,8 @@ function [params,Obj,vcov,G,exitflag,output] = SMM(model,params,obs,options,vara
 % exitflag from the optimization solver.
 %
 % [PARAMS,OBJ,VCOV,G,EXITFLAG,OUTPUT] = SMM(MODEL,PARAMS,OBS,...)
-% returns a structure OUTPUT from the optimization solver that contains
-% information about the optimization.
+% returns a structure OUTPUT that contains the overidentification statistics and
+% information about the optimization from the optimization solver.
 %
 % See also FMINSEARCH, FMINUNC, NUMJAC.
 
@@ -329,6 +329,11 @@ else
   output   = '';
 end
 params                      = ParamsTransformInv(SelectParams(PARAMS));
+
+%% Overidentification test
+output.OID_stat   = Obj * nobs1 * nrep / (1 + nrep);
+output.dof        = nmom - nactparams;
+output.OID_pvalue = chi2pdf(output.OID_stat, output.dof);
 
 %% Covariance of parameters
 
