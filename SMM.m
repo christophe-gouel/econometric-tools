@@ -368,7 +368,12 @@ if nargout>=3
   D   = diag(ParamsTransformInvDer(SelectParams(PARAMS)));
   D   = D(ActiveParams,ActiveParams);
   ind = ActiveParams(ActiveParams0);
-  vcov(ind,ind) = (1 + 1 / nrep) * D' * inv(J' * W * J) * D / nobs0; %#ok
+  if ~strcomp(weightingmatrixoptions.wtype, 'i')
+    vcov(ind,ind) = (1 + 1 / nrep) * D' * inv(J' * W * J) * D / nobs0; %#ok
+  else % Identity matrix for weighting
+    S = WeightingMatrix(moments_obs,'b',floor(4 * (nobs / 100) ^(2 / 9)),1,0);
+    vcov(ind,ind) = (1 + 1 / nrep) * D' * inv(J' * J) * (J' * S * J) * inv(J' * J) * D / nobs0; %#ok
+  end
 end
 
 if exist('CoefficientNames','var')
