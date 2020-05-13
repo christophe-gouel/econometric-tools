@@ -213,7 +213,7 @@ if tosolve
     for i=1:length(solver)
       switch lower(solver{i})
         case {'fmincon','fminunc','fminsearch','patternsearch'}
-          %% MATLAB solvers
+          %% MATLAB solvers except fminbnd
           Objective = @(P) SMMObj(ToTable(ParamsTransformInv(SelectParams(P))));
           problem = struct('objective', Objective,...
                            'x0'       , PARAMS,...
@@ -222,7 +222,16 @@ if tosolve
                            'ub'       , ub(ActiveParams),...
                            'options'  , solveroptions{i});
           [PARAMS,Obj,exitflag,output] = feval(solver{i},problem);
-
+        case 'fminbnd'
+          %% fminbnd
+          Objective = @(P) SMMObj(ToTable(ParamsTransformInv(SelectParams(P))));
+          problem = struct('objective', Objective,...
+                           'solver'   , solver{i},...
+                           'x1'       , lb(ActiveParams),...
+                           'x2'       , ub(ActiveParams),...
+                           'options'  , solveroptions{i});
+          [PARAMS,Obj,exitflag,output] = feval(solver{i},problem);
+          
         case 'multistart'
           Objective = @(P) SMMObj(ToTable(ParamsTransformInv(SelectParams(P)')));
           problem = createOptimProblem(             options.subsolver,...
