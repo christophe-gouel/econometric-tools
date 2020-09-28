@@ -54,6 +54,7 @@ nparams = size(params,1);
 defaultopt = struct('ActiveParams'          , []                          ,...
                     'bounds'                , struct('lb',-inf(nparams,1) ,...
                                                      'ub', inf(nparams,1)),...
+                    'modeltype'             , 'smm'                       ,...
                     'nrep'                  , 10                          ,...
                     'numjacoptions'         , struct()                    ,...
                     'ParamsTransform'       , @(P) P                      ,...
@@ -191,12 +192,20 @@ catch err
 
 end
 
-Emoments_obs = mean(moments_obs); % (1,nmom)
+Emoments_obs = mean(moments_obs,1); % (1,nmom)
 
-[nobs1,nmom] = size(moments_obs);
-nsim = nobs1 * (nrep - 1) + nobs0;
-nlost = nobs0 - nobs1;
+if strcmpi(options.modeltype, 'smm')
+  [nobs1,nmom] = size(moments_obs);
+  nsim = nobs1 * (nrep - 1) + nobs0;
+  nlost = nobs0 - nobs1;
+elseif strcmpi(options.modeltype, 'ind')
+  nobs1 = nobs0;
+  nsim = nobs0 * nrep;
+  nlost = 0;
+end
 
+% SimMoments will have to be changed for indirect inference: parameters should
+% be estimated on nrep subsamples
 SimMoments   = @(P) moments_fun(model.simulate(P,nsim,varargin{:}));
 
 %% Default values in case of errors
@@ -236,7 +245,7 @@ if tosolve
                            'x2'       , ub(ActiveParams),...
                            'options'  , solveroptions{i});
           [PARAMS,Obj,exitflag,output] = feval(solver{i},problem);
-          
+
         case 'multistart'
           Objective = @(P) SMMObj(ToTable(ParamsTransformInv(SelectParams(P)')));
           problem = createOptimProblem(             options.subsolver,...
@@ -371,8 +380,12 @@ if nargout>=4 || nargout>=3
     vec = @(y) y(:);
     G   = numjac(@(P) vec(SimMoments(ToTable(ParamsTransformInv(SelectParams(P))))),...
                  PARAMS,options.numjacoptions); % (nsim*nmom,nactparams)
-    G   = reshape(G,nsim-nlost,nmom,nactparams);      % (nsim,nmom,nactparams)
-    J   = squeeze(mean(G,1));                   % (nmom,nactparams)
+    if strcmpi(options.modeltype, 'smm')
+      G   = reshape(G,nsim-nlost,nmom,nactparams);      % (nsim,nmom,nactparams)
+      J   = squeeze(mean(G,1));                   % (nmom,nactparams)
+    elseif strcmpi(options.modeltype, 'ind')
+      J = G;
+    end
   catch err
     %% Values in case of error
     output   = err;
@@ -408,7 +421,7 @@ end
   if any(lb > par) || any(par > ub)
     Obj = Inf;
   else
-    M   = Emoments_obs - mean(SimMoments(par));
+    M   = Emoments_obs - mean(SimMoments(par),1);
     Obj = M * W * M';
   end
 
