@@ -194,8 +194,8 @@ end
 
 Emoments_obs = mean(moments_obs,1); % (1,nmom)
 
+[nobs1,nmom] = size(moments_obs);
 if strcmpi(options.modeltype, 'smm')
-  [nobs1,nmom] = size(moments_obs);
   nsim = nobs1 * (nrep - 1) + nobs0;
   nlost = nobs0 - nobs1;
 elseif strcmpi(options.modeltype, 'ind')
