@@ -384,7 +384,9 @@ if nargout>=4 || nargout>=3
       G   = reshape(G,nsim-nlost,nmom,nactparams);      % (nsim,nmom,nactparams)
       J   = squeeze(mean(G,1));                   % (nmom,nactparams)
     elseif strcmpi(options.modeltype, 'ind')
-      J = G;
+%      J = G;
+      G   = reshape(G,nrep,nmom,nactparams);      % (nrep,nmom,nactparams) % To check
+      J   = squeeze(mean(G,1));                   % (nmom,nactparams)
     end
   catch err
     %% Values in case of error
@@ -398,7 +400,7 @@ if nargout>=3
   D   = diag(ParamsTransformInvDer(SelectParams(PARAMS)));
   D   = D(ActiveParams,ActiveParams);
   ind = ActiveParams(ActiveParams0);
-  if ~strcmp(weightingmatrixoptions.wtype, 'i')
+  if ~strcmpi(weightingmatrixoptions.wtype, 'i') || strcmpi(options.modeltype, 'ind')
     vcov(ind,ind) = (1 + 1 / nrep) * D' * inv(J' * W * J) * D / nobs0; %#ok
   else % Identity matrix for weighting
     S = WeightingMatrix(moments_obs,'b',floor(4 * (nobs1 / 100) ^(2 / 9)),1,0);
