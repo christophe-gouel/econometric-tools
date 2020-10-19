@@ -384,9 +384,12 @@ if nargout>=4 || nargout>=3
       G   = reshape(G,nsim-nlost,nmom,nactparams);      % (nsim,nmom,nactparams)
       J   = squeeze(mean(G,1));                   % (nmom,nactparams)
     elseif strcmpi(options.modeltype, 'ind')
-%      J = G;
-      G   = reshape(G,nrep,nmom,nactparams);      % (nrep,nmom,nactparams) % To check
-      J   = squeeze(mean(G,1));                   % (nmom,nactparams)
+      if numel(G) == (nmom * nactparams) % If auxilliary model on nrep * nobs data
+        J = G;
+      else                               % If nrep auxilliary model on nobs data
+        G   = reshape(G,nrep,nmom,nactparams);      % (nrep,nmom,nactparams)
+        J   = squeeze(mean(G,1));                   % (nmom,nactparams)
+      end
     end
   catch err
     %% Values in case of error
