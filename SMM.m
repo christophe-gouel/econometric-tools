@@ -55,6 +55,7 @@ defaultopt = struct('ActiveParams'          , []                          ,...
                     'bounds'                , struct('lb',-inf(nparams,1) ,...
                                                      'ub', inf(nparams,1)),...
                     'modeltype'             , 'smm'                       ,...
+                    'nlag'                  , 0                           ,...
                     'nrep'                  , 10                          ,...
                     'numjacoptions'         , struct()                    ,...
                     'ParamsTransform'       , @(P) P                      ,...
@@ -199,9 +200,9 @@ if strcmpi(options.modeltype, 'smm')
   nsim = nobs1 * (nrep - 1) + nobs0;
   nlost = nobs0 - nobs1;
 elseif strcmpi(options.modeltype, 'ind')
-  nobs1 = nobs0;
-  nsim = nobs0 * nrep;
-  nlost = 0;
+  nobs1 = nobs0 - nlag;
+  nsim = nobs1 * nrep + nlag;
+  nlost = nlag;
 end
 
 % SimMoments will have to be changed for indirect inference: parameters should
@@ -361,6 +362,10 @@ output.OID_stat   = Obj * nobs1 * nrep / (1 + nrep);
 output.dof        = nmom - nactparams;
 output.OID_pvalue = chi2pdf(output.OID_stat, output.dof);
 
+%% Export moments
+output.moments_obs = Emoments_obs;
+output.moments_sim = mean(SimMoments(ToTable(ParamsTransformInv(SelectParams(PARAMS)))),1);
+
 %% Covariance of parameters
 
 % Covariance is only calculated for parameters that are not at their bounds
@@ -404,10 +409,10 @@ if nargout>=3
   D   = D(ActiveParams,ActiveParams);
   ind = ActiveParams(ActiveParams0);
   if ~strcmpi(weightingmatrixoptions.wtype, 'i') || strcmpi(options.modeltype, 'ind')
-    vcov(ind,ind) = (1 + 1 / nrep) * D' * inv(J' * W * J) * D / nobs0; %#ok
+    vcov(ind,ind) = (1 + 1 / nrep) * D' * inv(J' * W * J) * D / nobs1; %#ok
   else % Identity matrix for weighting
     S = WeightingMatrix(moments_obs,'b',floor(4 * (nobs1 / 100) ^(2 / 9)),1,0);
-    vcov(ind,ind) = (1 + 1 / nrep) * D' * inv(J' * J) * (J' * S * J) * inv(J' * J) * D / nobs0; %#ok
+    vcov(ind,ind) = (1 + 1 / nrep) * D' * inv(J' * J) * (J' * S * J) * inv(J' * J) * D / nobs1; %#ok
   end
 end
 
