@@ -116,6 +116,7 @@ else
 end
 
 nobs0 = size(obs,1);
+nlag  = options.nlag;
 nrep  = options.nrep;
 
 if options.TestParamsTransform && ...
@@ -164,33 +165,33 @@ moments_obs  = moments_fun(obs);
 if isempty(options.W)
   switch lower(weightingmatrixoptions.wtype)
     case 'bb' % for block bootstrap
-      W = WeightingMatrixBB(moments_fun,obs,...
-                            weightingmatrixoptions.N_BB,...
-                            weightingmatrixoptions.block_length,...
-                            weightingmatrixoptions.diagonly);
+      Winv = WeightingMatrixBB(moments_fun,obs,...
+                               weightingmatrixoptions.N_BB,...
+                               weightingmatrixoptions.block_length,...
+                               weightingmatrixoptions.diagonly);
     otherwise
-      W = WeightingMatrix(moments_obs,...
-                          weightingmatrixoptions.wtype,...
-                          weightingmatrixoptions.wlags,...
-                          weightingmatrixoptions.center,...
-                          weightingmatrixoptions.diagonly);
+      Winv = WeightingMatrix(moments_obs,...
+                             weightingmatrixoptions.wtype,...
+                             weightingmatrixoptions.wlags,...
+                             weightingmatrixoptions.center,...
+                             weightingmatrixoptions.diagonly);
+  end
+  try
+    W = pinv(Winv);
+  catch err
+    %% Values in case of error
+    params   = NaN(length(ActiveParams),1);
+    M        = NaN;
+    Obj      = NaN;
+    exitflag = 0;
+    vcov     = NaN(nactparams,nactparams);
+    G        = NaN(size(W,1),nactparams);
+    output   = err;
+    return
+
   end
 else
   W = options.W;
-end
-try
-  W = pinv(W);
-catch err
-  %% Values in case of error
-  params   = NaN(length(ActiveParams),1);
-  M        = NaN;
-  Obj      = NaN;
-  exitflag = 0;
-  vcov     = NaN(nactparams,nactparams);
-  G        = NaN(size(W,1),nactparams);
-  output   = err;
-  return
-
 end
 
 Emoments_obs = mean(moments_obs,1); % (1,nmom)
@@ -408,9 +409,11 @@ if nargout>=3
   D   = diag(ParamsTransformInvDer(SelectParams(PARAMS)));
   D   = D(ActiveParams,ActiveParams);
   ind = ActiveParams(ActiveParams0);
-  if ~strcmpi(weightingmatrixoptions.wtype, 'i') || strcmpi(options.modeltype, 'ind')
+  if ~strcmpi(weightingmatrixoptions.wtype, 'i')
     vcov(ind,ind) = (1 + 1 / nrep) * D' * inv(J' * W * J) * D / nobs1; %#ok
-  else % Identity matrix for weighting
+  elseif strcmpi(options.modeltype, 'ind')
+    vcov(ind,ind) = (1 + 1 / nrep) * D' * inv(J' * W * J) * D; %#ok
+  else % Identity matrix for weighting with SMM
     S = WeightingMatrix(moments_obs,'b',floor(4 * (nobs1 / 100) ^(2 / 9)),1,0);
     vcov(ind,ind) = (1 + 1 / nrep) * D' * inv(J' * J) * (J' * S * J) * inv(J' * J) * D / nobs1; %#ok
   end
