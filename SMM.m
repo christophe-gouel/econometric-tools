@@ -365,7 +365,11 @@ output.OID_pvalue = chi2pdf(output.OID_stat, output.dof);
 
 %% Export moments
 output.moments_obs = Emoments_obs;
-output.moments_sim = mean(SimMoments(ToTable(ParamsTransformInv(SelectParams(PARAMS)))),1);
+try
+  output.moments_sim = mean(SimMoments(ToTable(ParamsTransformInv(SelectParams(PARAMS)))),1);
+catch
+  output.moments_sim = NaN(size(Emoments_obs));
+end
 
 %% Covariance of parameters
 
