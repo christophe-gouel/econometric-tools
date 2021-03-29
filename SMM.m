@@ -44,7 +44,7 @@ function [params,Obj,vcov,G,exitflag,output] = SMM(model,params,obs,options,vara
 %
 % See also FMINSEARCH, FMINUNC, NUMJAC.
 
-% Copyright (C) 2019-2020 Christophe Gouel
+% Copyright (C) 2019-2021 Christophe Gouel
 % Licensed under the Expat license
 
 %% Initialization
@@ -54,6 +54,7 @@ nparams = size(params,1);
 defaultopt = struct('ActiveParams'          , []                          ,...
                     'bounds'                , struct('lb',-inf(nparams,1) ,...
                                                      'ub', inf(nparams,1)),...
+                    'Emoments_obs'          , []                          ,...
                     'modeltype'             , 'smm'                       ,...
                     'nlag'                  , 0                           ,...
                     'nrep'                  , 10                          ,...
@@ -194,7 +195,9 @@ else
   W = options.W;
 end
 
-Emoments_obs = mean(moments_obs,1); % (1,nmom)
+if isempty(options.Emoments_obs), Emoments_obs = mean(moments_obs,1); % (1,nmom)
+else,                             Emoments_obs = options.Emoments_obs;
+end
 
 [nobs1,nmom] = size(moments_obs);
 if strcmpi(options.modeltype, 'smm')
@@ -206,8 +209,6 @@ elseif strcmpi(options.modeltype, 'ind')
   nlost = nlag;
 end
 
-% SimMoments will have to be changed for indirect inference: parameters should
-% be estimated on nrep subsamples
 SimMoments   = @(P) moments_fun(model.simulate(P,nsim,varargin{:}));
 
 %% Default values in case of errors
