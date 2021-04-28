@@ -362,7 +362,7 @@ output.W = W;
 %% Overidentification test
 output.OID_stat   = Obj * nobs1 * nrep / (1 + nrep);
 output.dof        = nmom - nactparams;
-output.OID_pvalue = chi2pdf(output.OID_stat, output.dof);
+output.OID_pvalue = 1-chi2c df(output.OID_stat, output.dof);
 
 %% Export moments
 output.moments_obs = Emoments_obs;
