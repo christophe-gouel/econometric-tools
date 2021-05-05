@@ -367,7 +367,11 @@ else
   output.OID_stat   = Obj * nobs1 * nrep / (1 + nrep);
 end
 output.dof        = nmom - nactparams;
-output.OID_pvalue = 1 - chi2cdf(output.OID_stat, output.dof);
+try
+  output.OID_pvalue = 1 - chi2cdf(output.OID_stat, output.dof);
+catch
+  output.OID_pvalue = NaN;
+end
 
 %% Export moments
 output.moments_obs = Emoments_obs;
