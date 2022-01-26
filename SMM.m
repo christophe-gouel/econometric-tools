@@ -384,7 +384,7 @@ end
 %% Covariance of parameters
 
 % Covariance is only calculated for parameters that are not at their bounds
-AtBounds               = params==options.bounds.lb | params==options.bounds.ub;
+AtBounds               = abs(params-options.bounds.lb)<=1E-6 | abs(params-options.bounds.ub)<=1E-6;
 ActiveParams(AtBounds) = 0;
 SelectParamsMat        = zeros(nparams,sum(ActiveParams));
 SelectParamsMat(sub2ind(size(SelectParamsMat),ind(ActiveParams),1:sum(ActiveParams))) = 1;
@@ -413,7 +413,7 @@ if nargout>=4 || nargout>=3
     end
   catch err
     %% Values in case of error
-    output   = err;
+    output.error   = err;
     return
   end
 end
