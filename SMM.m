@@ -44,7 +44,7 @@ function [params,Obj,vcov,G,exitflag,output] = SMM(model,params,obs,options,vara
 %
 % See also FMINSEARCH, FMINUNC, NUMJAC.
 
-% Copyright (C) 2019-2021 Christophe Gouel
+% Copyright (C) 2019-2022 Christophe Gouel
 % Licensed under the Expat license
 
 %% Initialization
@@ -62,6 +62,7 @@ defaultopt = struct('ActiveParams'          , []                          ,...
                     'ParamsTransform'       , @(P) P                      ,...
                     'ParamsTransformInv'    , @(P) P                      ,...
                     'ParamsTransformInvDer' , @(P) ones(size(P))          ,...
+                    'simultype'             , 'long'                      ,...
                     'solver'                , {'fminunc'}                 ,...
                     'solveroptions'         , {struct()}                  ,...
                     'TestParamsTransform'   , true                        ,...
@@ -204,12 +205,19 @@ if strcmpi(options.modeltype, 'smm')
   nsim = nobs1 * (nrep - 1) + nobs0;
   nlost = nobs0 - nobs1;
 elseif strcmpi(options.modeltype, 'ind')
-  nobs1 = nobs0 - nlag;
-  nsim = nobs1 * nrep + nlag;
-  nlost = nlag;
+  if strcmpi(options.simultype, 'long')
+    nobs1 = nobs0 - nlag;
+    nsim = nobs1 * nrep + nlag;
+  elseif strcmpi(options.simultype, 'wide')
+    nsim = nobs0;
+  end
 end
 
-SimMoments   = @(P) moments_fun(model.simulate(P,nsim,varargin{:}));
+if strcmpi(options.simultype, 'long')
+  SimMoments   = @(P) moments_fun(model.simulate(P,nsim,1,varargin{:}));
+elseif strcmpi(options.simultype, 'wide')
+  SimMoments   = @(P) moments_fun(model.simulate(P,nsim,nrep,varargin{:}));
+end
 
 %% Default values in case of errors
 vcov = NaN(nactparams,nactparams);
@@ -226,7 +234,7 @@ else
 end
 
 if tosolve
-  try
+   try
     for i=1:length(solver)
       switch lower(solver{i})
         case {'fmincon','fminunc','fminsearch','patternsearch'}
@@ -399,14 +407,14 @@ if nargout>=4 || nargout>=3
     % Matrix of contributions to the gradient
     vec = @(y) y(:);
     G   = numjac(@(P) vec(SimMoments(ToTable(ParamsTransformInv(SelectParams(P))))),...
-                 PARAMS,options.numjacoptions); % (nsim*nmom,nactparams)
+                 PARAMS,options.numjacoptions);
     if strcmpi(options.modeltype, 'smm')
       G   = reshape(G,nsim-nlost,nmom,nactparams);      % (nsim,nmom,nactparams)
       J   = squeeze(mean(G,1));                   % (nmom,nactparams)
     elseif strcmpi(options.modeltype, 'ind')
-      if numel(G) == (nmom * nactparams) % If auxilliary model on nrep * nobs data
+      if numel(G) == (nmom * nactparams) % If auxilliary model on nrep * nobs data ('long')
         J = G;
-      else                               % If nrep auxilliary model on nobs data
+      else                               % If nrep auxilliary model on nobs data ('wide')
         G   = reshape(G,nrep,nmom,nactparams);      % (nrep,nmom,nactparams)
         J   = squeeze(mean(G,1));                   % (nmom,nactparams)
       end
