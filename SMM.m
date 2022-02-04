@@ -30,10 +30,11 @@ function [params,Obj,vcov,G,exitflag,output] = SMM(model,params,obs,options,vara
 % [PARAMS,OBJ] = SMM(MODEL,PARAMS,OBS,...) returns the value of the
 % objective at the solution.
 %
-% [PARAMS,OBJ,VCOV] = SMM(MODEL,PARAMS,OBS,...)
+% [PARAMS,OBJ,VCOV] = SMM(MODEL,PARAMS,OBS,...) returns the variance-covariance
+% matrix at the solution.
 %
-% [PARAMS,OBJ,VCOV,G] = SMM(MODEL,PARAMS,OBS,...) returns the gradient
-% with respect to the parameters of the log-likelihood at the solution.
+% [PARAMS,OBJ,VCOV,G] = SMM(MODEL,PARAMS,OBS,...) returns the Jacobian of the
+% moments with respect to the parameters at the solution.
 %
 % [PARAMS,OBJ,VCOV,G,EXITFLAG] = SMM(MODEL,PARAMS,OBS,...) returns the
 % exitflag from the optimization solver.
@@ -406,8 +407,8 @@ if nargout>=4 || nargout>=3
   try
     % Matrix of contributions to the gradient
     vec = @(y) y(:);
-    G   = numjac(@(P) vec(SimMoments(ToTable(ParamsTransformInv(SelectParams(P))))),...
-                 PARAMS,options.numjacoptions);
+    G   = -numjac(@(P) vec(SimMoments(ToTable(ParamsTransformInv(SelectParams(P))))),...
+                  PARAMS,options.numjacoptions);
     if strcmpi(options.modeltype, 'smm')
       G   = reshape(G,nsim-nlost,nmom,nactparams);      % (nsim,nmom,nactparams)
       J   = squeeze(mean(G,1));                   % (nmom,nactparams)
@@ -419,6 +420,8 @@ if nargout>=4 || nargout>=3
         J   = squeeze(mean(G,1));                   % (nmom,nactparams)
       end
     end
+    % Sensitivity of parameters to moments following Andrews, Gentzkiw, and Shapiro (2017, QJE)
+    output.Lambda = -(J' * W * J) \ (J' * W); 
   catch err
     %% Values in case of error
     output.error   = err;
