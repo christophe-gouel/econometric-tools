@@ -403,6 +403,9 @@ PARAMS                 = SelectParamsMat'*ParamsTransform(params);
 nactparams             = sum(ActiveParams);
 
 % Gradient
+D   = diag(ParamsTransformInvDer(SelectParams(PARAMS)));
+D   = D(ActiveParams,ActiveParams);
+
 if nargout>=4 || nargout>=3
   try
     % Matrix of contributions to the gradient
@@ -410,18 +413,15 @@ if nargout>=4 || nargout>=3
     G   = -numjac(@(P) vec(SimMoments(ToTable(ParamsTransformInv(SelectParams(P))))),...
                   PARAMS,options.numjacoptions);
     if strcmpi(options.modeltype, 'smm')
-      G   = reshape(G,nsim-nlost,nmom,nactparams);      % (nsim,nmom,nactparams)
-      J   = squeeze(mean(G,1));                   % (nmom,nactparams)
-    elseif strcmpi(options.modeltype, 'ind')
-      if numel(G) == (nmom * nactparams) % If auxilliary model on nrep * nobs data ('long')
-        J = G;
-      else                               % If nrep auxilliary model on nobs data ('wide')
-        G   = reshape(G,nrep,nmom,nactparams);      % (nrep,nmom,nactparams)
-        J   = squeeze(mean(G,1));                   % (nmom,nactparams)
-      end
+      G   = reshape(G,nsim-nlost,nmom,nactparams); % (nsim,nmom,nactparams)
+      G   = squeeze(mean(G,1));                    % (nmom,nactparams)
+    elseif strcmpi(options.modeltype, 'ind') && strcmpi(options.simultype, 'wide')
+      G   = reshape(G,nrep,nmom,nactparams);       % (nrep,nmom,nactparams)
+      G   = squeeze(mean(G,1));                    % (nmom,nactparams)
     end
+    G = G / D; 
     % Sensitivity of parameters to moments following Andrews, Gentzkiw, and Shapiro (2017, QJE)
-    output.Lambda = -(J' * W * J) \ (J' * W); 
+    output.Lambda = -(G' * W * G) \ (G' * W); 
   catch err
     %% Values in case of error
     output.error   = err;
@@ -431,16 +431,14 @@ end
 
 % Covariance
 if nargout>=3
-  D   = diag(ParamsTransformInvDer(SelectParams(PARAMS)));
-  D   = D(ActiveParams,ActiveParams);
   ind = ActiveParams(ActiveParams0);
   if ~strcmpi(weightingmatrixoptions.wtype, 'i')
-    vcov(ind,ind) = (1 + 1 / nrep) * D' * inv(J' * W * J) * D / nobs1; %#ok
+    vcov(ind,ind) = (1 + 1 / nrep) * inv(G' * W * G) / nobs1; %#ok
   elseif strcmpi(options.modeltype, 'ind')
-    vcov(ind,ind) = (1 + 1 / nrep) * D' * inv(J' * W * J) * D; %#ok
+    vcov(ind,ind) = (1 + 1 / nrep) * inv(G' * W * G); %#ok
   else % Identity matrix for weighting with SMM
     S = WeightingMatrix(moments_obs,'b',floor(4 * (nobs1 / 100) ^(2 / 9)),1,0);
-    vcov(ind,ind) = (1 + 1 / nrep) * D' * inv(J' * J) * (J' * S * J) * inv(J' * J) * D / nobs1; %#ok
+    vcov(ind,ind) = (1 + 1 / nrep) * inv(G' * G) * (G' * S * G) * inv(G' * G) / nobs1; %#ok
   end
 end
 
